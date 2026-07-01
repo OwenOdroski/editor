@@ -1,0 +1,15 @@
+{
+  "name": "APG REFERENCE EDITOR",
+  "short_name": "EDITOR",
+  "start_url": "model.html",
+  "display": "standalone",
+  "background_color": "#0f1214",
+  "theme_color": "#0f1214",
+  "icons": [
+    {
+      "src": "icon2.jpg",
+      "sizes": "1254x1254",
+      "type": "image/jpg"
+    }
+  ]
+}
