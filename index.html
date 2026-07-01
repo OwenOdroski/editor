@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>Speed Modelling Simple</title>
+    <title>DB Editor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -80,6 +80,11 @@
        z-index: 100;
        display: none
      }
+     .spacer {
+       height: 15px;
+       width: 10px;
+       background-color: white
+     }
   </style>
   <body>
     <!--
@@ -88,6 +93,7 @@
       Shortcuts:
     -->
     <div>
+      <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
       <input type="file" accept=".json" id="newFile"><br><br>
@@ -99,6 +105,7 @@
     </div>
 
     <div id="top-wrap">
+      <div class="spacer"></div>
       <h2>Theory of Operation</h2>
       <button onclick="document.getElementById('top-wrap').style.display = 'none'">Close</button>
       <select id="top-sel">
@@ -114,8 +121,10 @@
     </div>
 
     <div id="model-wrap">
+      <div class="spacer"></div>
       <div id="top">
         <div id="drawSettings">
+          <div class="spacer"></div>
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
           <button onclick="ex()">Extrude</button>
           <select id="tool">
@@ -128,6 +137,7 @@
           <button onclick="pencilMode()" id="pencilMode">Apple Pencil Mode</button>
         </div>
         <div id="placeSettings">
+          <div class="spacer"></div>
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
           <button onclick="document.getElementById('settings').style.display='block'">Settings</button>
           <button onclick="center()">Center</button>
@@ -136,6 +146,7 @@
           <p id="message"></p>
         </div>
         <div id="final">
+          <div class="spacer"></div>
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
           <button onclick="document.getElementById('settings').style.display='block'">Settings</button>
           <button onclick="document.getElementById('export').style.display='block'">Export</button>
