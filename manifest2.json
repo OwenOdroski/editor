@@ -1,7 +1,7 @@
 {
   "name": "APG REFERENCE EDITOR",
   "short_name": "EDITOR",
-  "start_url": "model.html",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#0f1214",
   "theme_color": "#0f1214",
