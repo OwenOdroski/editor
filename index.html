@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="manifest2.json">
+    <link rel="manifest" href="/manifest.json">
   </head>
   <style>
     #canvas {
@@ -37,7 +37,8 @@
       position: fixed;
       top: 0;
       left: 0;
-      z-index: 99
+      z-index: 99;
+      touch-action: none;
     }
     #placeSettings {
       display: none
@@ -53,7 +54,7 @@
        background-color: white;
        border: 2px solid #000000
      }
-     input {
+     input[type="text"] {
        padding: 8px;
        background-color: white;
        border: 2px solid #000000
@@ -126,7 +127,7 @@
         <div id="drawSettings">
           <div class="spacer"></div>
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
-          <button onclick="ex()">Extrude</button>
+          <button onclick="ex(); initExWin()">Extrude</button>
           <select id="tool">
             <option>Line</option>
             <option>3-Point Arc</option>
@@ -140,7 +141,6 @@
           <div class="spacer"></div>
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
           <button onclick="document.getElementById('settings').style.display='block'">Settings</button>
-          <button onclick="center()">Center</button>
           <button onclick="newDrawing()">New Drawing</button>
           <button onclick="place()">Place</button>
           <p id="message"></p>
@@ -169,21 +169,6 @@
         <button onclick="saveSettings()">Save</button>
       </div>
 
-      <div class="popup" id="adjust">
-        <h2>Adjust Object</h2>
-        <p>Position X: <input type="number" id="moveX"></p>
-        <p>Position Y: <input type="number" id="moveY"></p>
-        <p>Position Z: <input type="number" id="moveZ"></p>
-
-        <p>Rotation X: <input type="number" id="rotX"></p>
-        <p>Rotation Y: <input type="number" id="rotY"></p>
-        <p>Rotation Z: <input type="number" id="rotZ"></p>
-
-        <p>Scale X: <input type="number" id="scX"></p>
-        <p>Scale Y: <input type="number" id="scY"></p>
-        <p>Scale Z: <input type="number" id="scZ"></p>
-        <button onclick="saveAdjust()">Save</button>
-      </div>
       <canvas id="drawCanvas"></canvas>
       <canvas id="canvas"></canvas>
     </div>
@@ -597,25 +582,24 @@
         update()
       }
 
-      function saveAdjust() {
+      function saveAdjust(posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ) {
         if(selectedObj == undefined) {
-          document.getElementById('adjust').style.display = 'none'
+          alert('No object was found when saving')
           return
         }
+        try {
+          selectedObj.position.x = JSON.parse(posX.value)
+          selectedObj.position.y = JSON.parse(posY.value)
+          selectedObj.position.z = JSON.parse(posZ.value)
 
-        selectedObj.position.x = JSON.parse(document.getElementById('moveX').value)
-        selectedObj.position.y = JSON.parse(document.getElementById('moveY').value)
-        selectedObj.position.z = JSON.parse(document.getElementById('moveZ').value)
+          selectedObj.rotation.x = degToRad(JSON.parse(rotX.value))
+          selectedObj.rotation.y = degToRad(JSON.parse(rotY.value))
+          selectedObj.rotation.z = degToRad(JSON.parse(rotZ.value))
 
-        selectedObj.rotation.x = degToRad(JSON.parse(document.getElementById('rotX').value))
-        selectedObj.rotation.y = degToRad(JSON.parse(document.getElementById('rotY').value))
-        selectedObj.rotation.z = degToRad(JSON.parse(document.getElementById('rotZ').value))
-
-        selectedObj.scale.x = JSON.parse(document.getElementById('scX').value)
-        selectedObj.scale.y = JSON.parse(document.getElementById('scY').value)
-        selectedObj.scale.z = JSON.parse(document.getElementById('scZ').value)
-
-        document.getElementById('adjust').style.display = 'none'
+          selectedObj.scale.x = JSON.parse(scaleX.value)
+          selectedObj.scale.y = JSON.parse(scaleY.value)
+          selectedObj.scale.z = JSON.parse(scaleZ.value)
+        } catch(err) {}
       }
 
       function radToDeg(rad) {
@@ -670,23 +654,10 @@
             return
           } else if(curr.object.name == "draw") {
             selectedObj = curr.object
-            document.getElementById('adjust').style.display = 'block'
-
-            document.getElementById('moveX').value = curr.object.position.x
-            document.getElementById('moveY').value = curr.object.position.y
-            document.getElementById('moveZ').value = curr.object.position.z
-
-            document.getElementById('rotX').value = radToDeg(curr.object.rotation.x)
-            document.getElementById('rotY').value = radToDeg(curr.object.rotation.y)
-            document.getElementById('rotZ').value = radToDeg(curr.object.rotation.z)
-
-            document.getElementById('scX').value = curr.object.scale.x
-            document.getElementById('scY').value = curr.object.scale.y
-            document.getElementById('scZ').value = curr.object.scale.z
+            initExWin(curr.object)
             return
           }
         }
-        selectedObj = undefined
       })
       function cancel() {
         for(let i in points) {
@@ -730,15 +701,176 @@
         }
       }
 
-      function ex() {
-        let h = prompt("Extrude Height: ")
-        let height
-        try {
-          height = JSON.parse(h)
-        } catch(err) {
-          alert('Not a number')
-          return
+      function newDragBox(options = {width: 200, height: 400}) {
+        // HTML element that is like a built in popup
+        let wrap = document.createElement('div')
+        let grab = document.createElement('div')
+        let content = document.createElement('div')
+        let close = document.createElement('div')
+        let grabbed = false
+        let grabOff = [0, 0]
+
+        wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 50; left: 50; border: 2px solid #000000`
+        grab.style = `background-color: gray; height: 20px; width: ${options.width - 20}px;`
+        close.style = 'background-color: white; width: 20px; height: 20px; margin-right: -20px; float: right; cursor: pointer; text-align: center'
+        content.style = `background-color: white; height: ${options.height - 20}px; width: ${options.width}px;`
+        close.textContent = 'x'
+
+        close.onclick = function() {
+          wrap.style.display = 'none'
         }
+        wrap.onmousemove = function(e) {
+          if(!grabbed) {
+            let rect = wrap.getBoundingClientRect();
+            grabOff = [e.clientX - rect.left, e.clientY - rect.top]
+          }
+        }
+        grab.onmousedown = function() {
+          grabbed = true
+        }
+        grab.onmouseup = function() {
+          grabbed = false
+        }
+        window.onmousemove = function(e) {
+          if(grabbed) {
+            wrap.style.top = (e.clientY - grabOff[1]) + 'px'
+            wrap.style.left = (e.clientX - grabOff[0]) + 'px'
+          }
+        }
+
+        wrap.appendChild(grab)
+        grab.appendChild(close)
+        wrap.appendChild(content)
+        document.body.appendChild(wrap)
+
+        return content
+      }
+
+      function createTabs(tabNames, parent) {
+        let content = document.createElement('div') // View Content
+        let tab = document.createElement('div') // Tab button Content
+        let contentArray = []
+        let buttons = []
+
+        tab.style = `width: ${parent.style.width}; height: 20px; display: flex`
+
+        for(let i = 0; i < tabNames.length; i++) {
+          let div = document.createElement('div')
+          if(i == 0) {
+            content.appendChild(div)
+          }
+          contentArray.push(div)
+        }
+
+        for(let i = 0; i < tabNames.length; i++) {
+          let tabBut = document.createElement('div')
+
+          tabBut.style = `width: ${parseInt(getComputedStyle(parent).width) / tabNames.length}px; height: 20px; cursor: pointer; text-align: center;`
+          tabBut.textContent = tabNames[i]
+
+          if(i == 0) {
+            tabBut.style.backgroundColor = 'lightgray'
+          }
+
+          tabBut.onclick = function() {
+            for(let u = 0; u < buttons.length; u++) {
+              buttons[u].style.backgroundColor = 'white'
+            }
+            tabBut.style.backgroundColor = 'lightgray'
+            content.innerHTML = ''
+            content.appendChild(contentArray[i])
+          }
+          buttons.push(tabBut)
+          tab.appendChild(tabBut)
+        }
+
+        parent.appendChild(tab)
+        parent.appendChild(content)
+
+        return contentArray
+      }
+
+      let createdMesh
+
+      function initExWin(mesh) {
+        const curr = mesh || createdMesh;
+
+        if (!curr) {
+            alert('There was an error finding the mesh');
+            return;
+        }
+
+        // Create settings window
+        const win = newDragBox();
+        const tabs = createTabs(['POS', 'SCALE', 'ROT'], win);
+
+        const inputs = {};
+
+        function update() {
+            saveAdjust(
+                inputs.posX, inputs.posY, inputs.posZ,
+                inputs.scaleX, inputs.scaleY, inputs.scaleZ,
+                inputs.rotX, inputs.rotY, inputs.rotZ
+            );
+        }
+
+        const groups = [
+            {
+                name: 'pos',
+                tab: tabs[0],
+                values: {
+                    x: curr.position.x,
+                    y: curr.position.y,
+                    z: curr.position.z
+                }
+            },
+            {
+                name: 'scale',
+                tab: tabs[1],
+                values: {
+                    x: curr.scale.x,
+                    y: curr.scale.y,
+                    z: curr.scale.z
+                }
+            },
+            {
+                name: 'rot',
+                tab: tabs[2],
+                values: {
+                    x: radToDeg(curr.rotation.x),
+                    y: radToDeg(curr.rotation.y),
+                    z: radToDeg(curr.rotation.z)
+                }
+            }
+        ];
+
+        for (const group of groups) {
+            for (const axis of ['x', 'y', 'z']) {
+                const label = document.createElement('label');
+                const input = document.createElement('input');
+
+                const id = `${group.name}${axis}`;
+
+                label.htmlFor = id;
+                label.textContent = axis.toUpperCase();
+
+                input.type = 'number';
+                input.id = id;
+                input.className = 'winInput';
+                input.value = group.values[axis];
+
+                input.addEventListener('input', update);
+
+                inputs[`${group.name}${axis.toUpperCase()}`] = input;
+
+                group.tab.appendChild(label);
+                group.tab.appendChild(input);
+                group.tab.appendChild(document.createElement('br'));
+            }
+        }
+    }
+      function ex() {
+        let height = 10
         let ext = extrude(points)
         if(ext.success) {
           document.getElementById('drawSettings').style.display = 'none'
@@ -769,6 +901,8 @@
           ext.mesh.scale.set(0.1, 0.1, height)
 
           expMesh = ext.mesh
+          createdMesh = ext.mesh
+          selectedObj = ext.mesh
 
         } else {
           alert(JSON.stringify(ext.errors))
@@ -1030,104 +1164,129 @@
         }
       }
 
-      function mousemove(e) {
-        let mouse = {
-          x: e.clientX,
-          y: e.clientY
-        }
-        let found = false
+      function shouldDraw(e) {
+          // If pencil mode is ON, only Apple Pencil/pen draws
+          if (pencil && e.pointerType !== 'pen') return false;
 
-        m = {
-          x: e.clientX,
-          y: e.clientY
-        }
-
-        // Latch Helper
-        for(let i = 0; i < points.length; i++) {
-          if(points[i].finished) {
-            if(points[i].type == 'line') {
-              if(close(mouse, points[i].cords[0])) {
-                // Place circle over point
-                latchHelper.x = points[i].cords[0].x
-                latchHelper.y = points[i].cords[0].y
-                found = true
-              }
-              if(close(mouse, points[i].cords[1])) {
-                // Place circle over point
-                latchHelper.x = points[i].cords[1].x
-                latchHelper.y = points[i].cords[1].y
-                found = true
-              }
-            } else if(points[i].type == 'arc') {
-              if(close(mouse, points[i].cords[0])) {
-                // Place circle over point
-                latchHelper.x = points[i].cords[0].x
-                latchHelper.y = points[i].cords[0].y
-                found = true
-              }
-              if(close(mouse, points[i].cords[1])) {
-                // Place circle over point
-                latchHelper.x = points[i].cords[1].x
-                latchHelper.y = points[i].cords[1].y
-                found = true
-              }
-            }
-          }
-        }
-        if(!found) latchHelper = {x: -5, y: -5, size: 10}
-        update()
+          // If pencil mode is OFF, allow mouse/touch/pen like normal
+          return true;
       }
 
-      function mousedown(u) {
-        let e = {
-          clientX: u.clientX,
-          clientY: u.clientY
-        }
+      function getCanvasPoint(e) {
+          const rect = canvas.getBoundingClientRect();
 
-        if(latchHelper.x != -5) {
-          e.clientX = latchHelper.x
-          e.clientY = latchHelper.y
-        }
-        if(type == 'line') {
-          if(phase == -1) {
-            phase = 0
-            points.push({type: 'line', finished: false, cords: [{x: e.clientX, y: e.clientY}]})
-          } else if(phase == 0) {
-            if(!pencil) {
-              phase = -1
-              points[points.length - 1].cords.push({x: e.clientX, y: e.clientY})
-              points[points.length - 1].finished = true
-              history = []
-            }
-          }
-        } else if(type == 'arc') {
-          if(phase == -1) {
-            phase = 0
-            points.push({type: 'arc', finished: false, cords: [{x: e.clientX, y: e.clientY}]})
-          } else if(phase == 0) {
-            phase = 1
-            points[points.length - 1].cords.push({x: e.clientX, y: e.clientY})
-          } else if(phase == 1) {
-            phase = -1
-            points[points.length - 1].cords.push({x: e.clientX, y: e.clientY})
-            points[points.length - 1].finished = true
-            history = []
-          }
-        }
-        update()
-      }
-      function mouseup(e) {
-        if(pencil) {
-          // Only really affects line
-          if(phase == 0 && type == 'line') {
-           phase = -1
-           points[points.length - 1].cords.push({x: e.clientX, y: e.clientY})
-           points[points.length - 1].finished = true
-           history = []
-         }
-        }
+          return {
+              x: e.clientX - rect.left,
+              y: e.clientY - rect.top
+          };
       }
 
+      function pointerMove(e) {
+          if (!shouldDraw(e)) return;
+
+          const mouse = getCanvasPoint(e);
+          let found = false;
+
+          m = mouse;
+
+          for (let i = 0; i < points.length; i++) {
+              if (!points[i].finished) continue;
+
+              const p = points[i];
+
+              if (p.type === 'line' || p.type === 'arc') {
+                  if (close(mouse, p.cords[0])) {
+                      latchHelper.x = p.cords[0].x;
+                      latchHelper.y = p.cords[0].y;
+                      found = true;
+                  }
+
+                  if (close(mouse, p.cords[1])) {
+                      latchHelper.x = p.cords[1].x;
+                      latchHelper.y = p.cords[1].y;
+                      found = true;
+                  }
+              }
+          }
+
+          if (!found) {
+              latchHelper = { x: -5, y: -5, size: 10 };
+          }
+
+          update();
+      }
+
+      function pointerDown(e) {
+          if (!shouldDraw(e)) return;
+
+          e.preventDefault();
+
+          activePointerId = e.pointerId;
+          canvas.setPointerCapture(e.pointerId);
+
+          let p = getCanvasPoint(e);
+
+          if (latchHelper.x !== -5) {
+              p.x = latchHelper.x;
+              p.y = latchHelper.y;
+          }
+
+          if (type === 'line') {
+              if (phase === -1) {
+                  phase = 0;
+                  points.push({
+                      type: 'line',
+                      finished: false,
+                      cords: [{ x: p.x, y: p.y }]
+                  });
+              } else if (phase === 0 && !pencil) {
+                  phase = -1;
+                  points[points.length - 1].cords.push({ x: p.x, y: p.y });
+                  points[points.length - 1].finished = true;
+                  history = [];
+              }
+          }
+
+          else if (type === 'arc') {
+              if (phase === -1) {
+                  phase = 0;
+                  points.push({
+                      type: 'arc',
+                      finished: false,
+                      cords: [{ x: p.x, y: p.y }]
+                  });
+              } else if (phase === 0) {
+                  phase = 1;
+                  points[points.length - 1].cords.push({ x: p.x, y: p.y });
+              } else if (phase === 1) {
+                  phase = -1;
+                  points[points.length - 1].cords.push({ x: p.x, y: p.y });
+                  points[points.length - 1].finished = true;
+                  history = [];
+              }
+          }
+
+          update();
+      }
+
+      function pointerUp(e) {
+          if (activePointerId !== e.pointerId) return;
+          if (!shouldDraw(e)) return;
+
+          e.preventDefault();
+
+          const p = getCanvasPoint(e);
+
+          if (pencil && phase === 0 && type === 'line') {
+              phase = -1;
+              points[points.length - 1].cords.push({ x: p.x, y: p.y });
+              points[points.length - 1].finished = true;
+              history = [];
+          }
+
+          activePointerId = null;
+          update();
+      }
       function update() {
         canvas.width = canvas.width
 
@@ -1170,9 +1329,12 @@
         }
       }
 
-      canvas.addEventListener('pointermove', mousemove);
-      canvas.addEventListener('pointerdown', mousedown);
-      canvas.addEventListener('pointerup', mouseup);
+      let activePointerId = null;
+
+    canvas.addEventListener('pointerdown', pointerDown);
+    canvas.addEventListener('pointermove', pointerMove);
+    canvas.addEventListener('pointerup', pointerUp);
+    canvas.addEventListener('pointercancel', pointerUp);
 
       function draw3PointArc(p1, p2, p3) {
         // Calculate circle center
