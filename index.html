@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="/manifest2.json">
   </head>
   <style>
     #canvas {
@@ -86,6 +86,26 @@
        width: 10px;
        background-color: white
      }
+     #int-wrap, #ext-wrap, #to-wrap, #ref-wrap {
+       position: fixed;
+       top: 0;
+       left: 0;
+       display: none;
+       background-color: white;
+       width: 100%;
+       height: 100%
+     }
+     #int-result {
+       position: fixed;
+       top: 0;
+       left: 0;
+       width: 100%;
+       height: 100%;
+       background-color: white;
+       z-index: 100;
+       display: none;
+       padding: 8px
+     }
   </style>
   <body>
     <!--
@@ -100,9 +120,29 @@
       <input type="file" accept=".json" id="newFile"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <br><br>
-      <h4>Editable Data</h4>
+      <h4>3D Editors</h4>
       <button onclick="document.getElementById('model-wrap').style.display = 'block'">Spatial Index</button>
+      <button onclick="document.getElementById('ext-wrap').style.display = 'block'">Panel Chart</button>
+      <button onclick="document.getElementById('int-wrap').style.display = 'block'">Cockpit Chart</button>
+
+      <h4>Text Editors</h4>
       <button onclick="document.getElementById('top-wrap').style.display = 'block'">Theory of Operation</button>
+      <button onclick="document.getElementById('ref-wrap').style.display = 'block'">References</button>
+      <button onclick="document.getElementById('to-wrap').style.display = 'block'">TO Search</button>
+    </div>
+
+    <div id="ext-wrap">
+      <canvas id="ext-panel"></canvas>
+    </div>
+
+    <div id="int-wrap">
+      <canvas id="int-panel"></canvas>
+      <div id="int-result">
+        <div id="spacer"></div>
+        <button onclick="document.getElementById('int-result').style.display = 'none'">Close</button>
+        <button onclick="saveTop()">Save</button>
+        <div id="int-result2" style="overflow-y: auto; height: calc(100% - 50px)"></div>
+      </div>
     </div>
 
     <div id="top-wrap">
@@ -120,6 +160,29 @@
 
       <div id="top-res" style="height: 100%; overflow-y: auto"></div>
     </div>
+
+    <div id="ref-wrap">
+      <div class="spacer"></div>
+      <h2>References</h2>
+      <button onclick="document.getElementById('ref-wrap').style.display = 'none'">Close</button>
+      <select id="ref-sel"></select>
+      <button onclick="newRef()">New Reference</button>
+      <button onclick="newStep()">Add Step</button>
+      <button onclick="saveTop()">Save</button>
+      <div id="ref-res" style="width: 100%; height: calc(100% - 50px); overflow-y: auto"></div>
+    </div>
+
+    <div id="to-wrap">
+      <div class="spacer"></div>
+      <h2>TO Search</h2>
+      <button onclick="document.getElementById('to-wrap').style.display = 'none'">Close</button><br>
+      <input id="to-nomen" placeholder="Nomenclature">
+      <input id="to-to" placeholder="Book">
+      <input id="to-midas" placeholder="MIDAS">
+      <button onclick="addTO()">Add</button>
+      <div id="to-res" style="border: 2px solid #000000; width: 50%; height: 300px; overflow-y: auto"></div>
+    </div>
+
 
     <div id="model-wrap">
       <div class="spacer"></div>
@@ -299,6 +362,88 @@
         }
       }
 
+      // TO Search
+      let toRes = document.getElementById('to-res')
+      window.setTimeout(function() {
+        for(let i = 0; i < db.to.length; i++) {
+          let span = document.createElement('span')
+          span.textContent = db.to[i].name + " (" + db.to[i].TO + ", " + db.to[i].MIDAS + ")"
+          toRes.appendChild(span)
+          toRes.appendChild(document.createElement('br'))
+          toRes.appendChild(document.createElement('br'))
+        }
+      }, 500)
+
+      function addTO() {
+        let nomen = document.getElementById('to-nomen')
+        let to = document.getElementById('to-to')
+        let midas = document.getElementById('to-midas')
+        let format = (d) => {
+          if(d < 10) {
+            return "0" + d
+          }
+          return d
+        }
+        let d = new Date()
+        let date = d.getFullYear() + "" + format(d.getMonth() + 1) + "" + format(d.getDate())
+
+        db.to.push({name: nomen.value, TO: to.value, MIDAS: midas.value, date: date})
+        saveTop()
+      }
+
+      // References
+      let sel2 = document.getElementById('ref-sel')
+      let res = document.getElementById('ref-res')
+      sel2.innerHTML = ''
+
+      window.setTimeout(function() {
+        for(let i in db.notes) {
+          let option = document.createElement('option')
+          option.textContent = db.notes[i].name
+          sel2.appendChild(option)
+        }
+      }, 500)
+
+      sel2.onchange = function() {
+        let data = db.notes[sel2.selectedIndex].steps
+
+        res.innerHTML = ''
+        for(let i = 0; i < data.length; i++) {
+          let input = document.createElement('textarea')
+          input.rows = 10
+          input.cols = 50
+          input.value = data[i]
+          res.appendChild(document.createElement('br'))
+          res.appendChild(input)
+          res.appendChild(document.createElement('br'))
+
+          input.onkeyup = function() {
+            db.notes[sel2.selectedIndex].steps[i] = input.value
+          }
+        }
+      }
+      function newRef() {
+        let name = prompt("Reference Name: ")
+        db.notes.push({name: name, steps: []})
+
+        let option = document.createElement('option')
+        option.textContent = name
+        sel2.appendChild(option)
+
+        saveTop()
+      }
+      function newStep() {
+        db.notes[sel2.selectedIndex].steps.push()
+
+        let option = document.createElement('textarea')
+        option.rows = 10
+        option.cols = 50
+        res.appendChild(option)
+
+        saveTop()
+      }
+
+
       // Theory of Operation
       let sel = document.getElementById('top-sel')
       let topWrap = document.getElementById('top-res')
@@ -368,6 +513,293 @@
         saveJSON(indexed, 'editDB', db)
       }
 
+      // Cockpit Chart
+      let load = new THREE.GLTFLoader()
+      let scene2 = new THREE.Scene()
+      let c2 = document.querySelector('#int-panel')
+      scene2.background = new THREE.Color(0xFFFFFF)
+
+      let camera2 = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
+      let renderer2 = new THREE.WebGLRenderer({ antialias: true, canvas: c2 });
+      renderer2.setSize(innerWidth, innerHeight);
+
+      let controls2 = new THREE.OrbitControls(camera2, renderer2.domElement);
+      camera2.position.set(0, 50, 0)
+      camera2.rotation.y = Math.PI / -2
+
+      let light2 = new THREE.AmbientLight(0xffffff, 1);
+      scene2.add(light2);
+
+      window.setTimeout(function() {
+        load.load('cockpit.glb', (gltf) => {
+          scene2.add(gltf.scene)
+          gltf.scene.position.set(0, -20, 200)
+          gltf.scene.scale.set(8, 8, 8)
+          gltf.scene.rotation.x = Math.PI / -2
+          gltf.scene.rotation.z = Math.PI / -2
+          gltf.scene.children[0].children[9].visible = false
+
+          let pos = new THREE.Vector3(0 + 29, 0.5, 200)
+          camera2.position.copy(pos)
+          camera2.position.x -= 0.1
+          controls2.target.copy(pos)
+          controls2.enableZoom = false
+          controls2.rotateSpeed = 1
+
+          for(let i = 0; i < db.cpPanels.length; i++) {
+            let curr = db.cpPanels[i]
+            let mesh = new THREE.Mesh(
+              new THREE.SphereGeometry(0.1, 15, 15),
+              new THREE.MeshBasicMaterial({color: 0xFF0000})
+            )
+            mesh.name = i
+            mesh.position.x = curr.cords[0]
+            mesh.position.y = curr.cords[1]
+            mesh.position.z = curr.cords[2]
+            scene2.add(mesh)
+          }
+        })
+
+        let raycaster = new THREE.Raycaster()
+        let pointer = new THREE.Vector2()
+
+        c2.onpointerdown = function(event) {
+          pointer.x = (event.clientX / c2.clientWidth) * 2 - 1;
+          pointer.y = -(event.clientY / c2.clientHeight) * 2 + 1;
+
+          raycaster.setFromCamera(pointer, camera2);
+
+          const intersects = raycaster.intersectObject(scene2, true);
+
+          if(intersects.length != 0) {
+            let sel = intersects[0]
+
+            if(sel.object.name[0] != "O") {
+              let format = (val) => { return Math.floor(val * 100) }
+              let panel = db.cpPanels[intersects[0].object.name]
+              let ident = format(panel.cords[0]) + '/' + format(panel.cords[1]) + '/' + format(panel.cords[2])
+              let data = db.panelData[ident]
+              let res = document.getElementById('int-result2')
+
+              document.getElementById('int-result').style.display = 'block'
+
+              res.innerHTML = ''
+
+              for(let i = 0; i < data.length; i++) {
+                let curr = data[i]
+                let wrap = document.createElement('div')
+                let type = document.createElement('select')
+                let name = document.createElement('input')
+                let body = document.createElement('textarea')
+
+                name.setAttribute('type', 'text')
+                name.setAttribute('style', 'margin: 8px')
+                type.setAttribute('style', 'margin: 8px')
+                body.setAttribute('style', 'margin: 8px')
+
+                body.setAttribute('rows', '20')
+                body.setAttribute('cols', '200')
+
+                type.innerHTML = '<option>top</option><option>tab</option>'
+                body.value = curr.data
+
+                if(curr.type != 'top') {
+                  name.value = curr.name
+                }
+
+                if(curr.type == 'top') {
+                  type.selectedIndex = 0
+                } else {
+                  type.selectedIndex = 1
+                }
+
+                // Updates
+                body.onkeyup = function() {
+                  db.panelData[ident][i].data = body.value
+                }
+                name.onkeyup = function() {
+                  db.panelData[ident][i].name = name.value
+                }
+                type.onkeyup = function() {
+                  db.panelData[ident][i].type = type.value
+                }
+
+                wrap.appendChild(document.createElement('br'))
+                wrap.appendChild(type)
+                wrap.appendChild(document.createElement('br'))
+                if(curr.type != 'top') {
+                  wrap.appendChild(name)
+                  wrap.appendChild(document.createElement('br'))
+                }
+                wrap.appendChild(body)
+                wrap.appendChild(document.createElement('hr'))
+                res.appendChild(wrap)
+              }
+            }
+          }
+        }
+      }, 500)
+
+      function loop2() {
+        requestAnimationFrame(loop2)
+
+        renderer2.render(scene2, camera2)
+      }
+      loop2()
+
+      // External Panel Chart
+      let scene3 = new THREE.Scene();
+      let c3 = document.querySelector('#ext-panel')
+      scene3.background = new THREE.Color(0xFFFFFF)
+
+      let camera3 = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
+      let renderer3 = new THREE.WebGLRenderer({ antialias: true, canvas: c3 });
+      renderer3.setSize(innerWidth, innerHeight);
+
+      let controls3 = new THREE.OrbitControls(camera3, renderer3.domElement);
+      camera3.position.set(100, 60, 100)
+      camera3.lookAt(0, 0, 0)
+
+      let light3 = new THREE.AmbientLight(0xffffff, 1);
+      scene3.add(light3);
+
+      load.load('f16.glb', (gltf) => {
+
+        gltf.scene.children[0].children[0].children[0].children[5].visible = false
+        gltf.scene.children[0].children[0].children[0].children[3].visible = false
+
+        scene3.add(gltf.scene)
+
+        // Add saved panels
+        for(let i in db.panels) {
+          let curr = db.panels[i]
+          let mesh = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 12, 12),
+            new THREE.MeshBasicMaterial({color: 0xFF0000, opacity: 0.4, transparent: true})
+          )
+          mesh.position.set(curr.cords[0], curr.cords[1], curr.cords[2])
+          mesh.name = i
+          scene3.add(mesh)
+        }
+
+        let raycaster = new THREE.Raycaster()
+        let pointer = new THREE.Vector2()
+
+        c3.onclick = function(event) {
+          pointer.x = (event.clientX / c3.clientWidth) * 2 - 1;
+          pointer.y = -(event.clientY / c3.clientHeight) * 2 + 1;
+
+          raycaster.setFromCamera(pointer, camera3);
+
+          const intersects = raycaster.intersectObjects(scene3.children, true);
+
+          if(intersects.length != 0) {
+            let obj = intersects[0].object
+
+            if(obj.name[0] == 'O') { // Create new
+              open(intersects[0].point)
+            } else {
+              open(undefined, obj.name)
+            }
+            function open(pos, index) {
+              let wind = newDragBox()
+              let win = wind.win
+              let number = document.createElement('input')
+              let ref = document.createElement('input')
+              let type = document.createElement('select')
+              let desc = document.createElement('textarea')
+              let save = document.createElement('button')
+              let del = document.createElement('button')
+              let label = (name) => {
+                let l = document.createElement('span')
+                l.textContent = name
+                l.prepend(document.createElement('br'))
+                return l
+              }
+              win.style.margin = 3
+
+              type.innerHTML = `
+                <option>Panel</option>
+                <option>Door</option>
+                <option>Quick Access Door</option>
+                <option>Stress Panel</option>
+              `
+
+              if(index != undefined) {
+                number.value = db.panels[index].number ? db.panels[index].number : ""
+                ref.value = db.panels[index].ref ? db.panels[index].ref : ""
+                desc.value = db.panels[index].desc ? db.panels[index].desc : ""
+
+                type.selectedIndex = ["PANEL", "DOOR", "QUICK ACCESS DOOR", "STRESS PANEL"].indexOf(db.panels[index].type.toUpperCase())
+              }
+              let mesh
+              // Create mesh
+              if(pos != undefined) {
+                mesh = new THREE.Mesh(
+                  new THREE.SphereGeometry(1, 12, 12),
+                  new THREE.MeshBasicMaterial({color: 0xFF0000, opacity: 0.4, transparent: true})
+                )
+                mesh.position.copy(pos)
+                scene3.add(mesh)
+              }
+
+              save.textContent = 'Save'
+              del.textContent = 'Delete'
+
+              save.onclick = function() {
+                if(index != undefined) {
+                  db.panels[index].number = number.value
+                  db.panels[index].ref = ref.value
+                  db.panels[index].desc = desc.value
+                  db.panels[index].type = type.value
+                } else {
+                  db.panels.push({
+                    number: number.value,
+                    ref: ref.value,
+                    desc: desc.value,
+                    type: type.value,
+                    cords: [mesh.position.x, mesh.position.y, mesh.position.z]
+                  })
+                }
+                wind.remove()
+                saveTop()
+              }
+              del.onclick = function() {
+                if(index != undefined) {
+                  db.panels.splice(index, 1)
+                }
+                scene3.remove(mesh)
+                wind.remove()
+                saveTop()
+              }
+
+              win.appendChild(label('Number'))
+              win.appendChild(number)
+
+              win.appendChild(label('TO Reference'))
+              win.appendChild(ref)
+
+              win.appendChild(type)
+
+              win.appendChild(label('Description'))
+              win.appendChild(desc)
+
+              win.appendChild(save)
+              win.appendChild(del)
+            }
+          }
+        }
+      })
+
+      function loop3() {
+        requestAnimationFrame(loop3)
+
+        renderer3.render(scene3, camera3)
+      }
+
+      loop3()
+
+
       // Spatial Index Editing
       let scene = new THREE.Scene();
       let c = document.querySelector('#canvas')
@@ -400,7 +832,6 @@
 
       scene.add(grid);
 
-      let load = new THREE.GLTFLoader()
       let plane = undefined
       let canvas = document.querySelector('#drawCanvas')
       let ctx = canvas.getContext('2d')
@@ -711,27 +1142,27 @@
         let grabOff = [0, 0]
 
         wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 50; left: 50; border: 2px solid #000000`
-        grab.style = `background-color: gray; height: 20px; width: ${options.width - 20}px;`
+        grab.style = `background-color: gray; height: 20px; width: ${options.width - 20}px; touch-action: none`
         close.style = 'background-color: white; width: 20px; height: 20px; margin-right: -20px; float: right; cursor: pointer; text-align: center'
-        content.style = `background-color: white; height: ${options.height - 20}px; width: ${options.width}px;`
+        content.style = `height: ${options.height - 20}px; width: ${options.width}px;`
         close.textContent = 'x'
 
         close.onclick = function() {
           wrap.style.display = 'none'
         }
-        wrap.onmousemove = function(e) {
+        wrap.onpointermove = function(e) {
           if(!grabbed) {
             let rect = wrap.getBoundingClientRect();
             grabOff = [e.clientX - rect.left, e.clientY - rect.top]
           }
         }
-        grab.onmousedown = function() {
+        grab.onpointerdown = function() {
           grabbed = true
         }
-        grab.onmouseup = function() {
+        grab.onpointerup = function() {
           grabbed = false
         }
-        window.onmousemove = function(e) {
+        window.onpointermove = function(e) {
           if(grabbed) {
             wrap.style.top = (e.clientY - grabOff[1]) + 'px'
             wrap.style.left = (e.clientX - grabOff[0]) + 'px'
@@ -743,7 +1174,9 @@
         wrap.appendChild(content)
         document.body.appendChild(wrap)
 
-        return content
+        return {win: content, remove: function() {
+          wrap.remove()
+        }}
       }
 
       function createTabs(tabNames, parent) {
@@ -801,7 +1234,7 @@
         }
 
         // Create settings window
-        const win = newDragBox();
+        const win = newDragBox().win;
         const tabs = createTabs(['POS', 'SCALE', 'ROT'], win);
 
         const inputs = {};
