@@ -6,6 +6,8 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest2.json">
+    <link href="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.js"></script>
   </head>
   <style>
     #canvas {
@@ -71,29 +73,21 @@
      #model-wrap {
        display: none
      }
-     #top-wrap {
-       position: fixed;
-       top: 0;
-       left: 0;
-       width: 100%;
-       height: 100%;
-       background-color: white;
-       z-index: 100;
-       display: none
-     }
      .spacer {
        height: 15px;
        width: 10px;
        background-color: white
      }
-     #int-wrap, #ext-wrap, #to-wrap, #ref-wrap {
+     #int-wrap, #ext-wrap, #to-wrap, #ref-wrap, #top-wrap, #json-wrap {
        position: fixed;
        top: 0;
        left: 0;
        display: none;
        background-color: white;
        width: 100%;
-       height: 100%
+       height: 100%;
+       padding: 16px;
+       z-index: 100;
      }
      #int-result {
        position: fixed;
@@ -105,6 +99,15 @@
        z-index: 100;
        display: none;
        padding: 8px
+     }
+     #area {
+       position: fixed;
+       top: 52px;
+       left: 0;
+       width: 100vw;
+       height: calc(100vh - 52px);
+       box-sizing: border-box;
+       resize: none;
      }
   </style>
   <body>
@@ -129,13 +132,25 @@
       <button onclick="document.getElementById('top-wrap').style.display = 'block'">Theory of Operation</button>
       <button onclick="document.getElementById('ref-wrap').style.display = 'block'">References</button>
       <button onclick="document.getElementById('to-wrap').style.display = 'block'">TO Search</button>
+      <button onclick="document.getElementById('json-wrap').style.display = 'block'">Edit File</button>
+    </div>
+
+    <div id="json-wrap">
+      <div style="position: fixed; top: 0; left: 0">
+        <div class="spacer"></div>
+        <button onclick="document.getElementById('json-wrap').style.display = 'none'">Close</button>
+        <button onclick="saveJSONtext()">Save</button>
+      </div>
+      <div id="area"></div>
     </div>
 
     <div id="ext-wrap">
+      <button style="position: fixed; top: 8px; left: 8px; z-index: 100" onclick="document.getElementById('ext-wrap').style.display = 'none'">Close</button>
       <canvas id="ext-panel"></canvas>
     </div>
 
     <div id="int-wrap">
+      <button style="position: fixed; top: 8px; left: 8px; z-index: 100" onclick="document.getElementById('int-wrap').style.display = 'none'">Close</button>
       <canvas id="int-panel"></canvas>
       <div id="int-result">
         <div id="spacer"></div>
@@ -158,7 +173,7 @@
       <button onclick="saveTop()">Save</button>
       <button onclick="newTop()">New</button>
 
-      <div id="top-res" style="height: 100%; overflow-y: auto"></div>
+      <div id="top-res" style="height: calc(100% - 100px); overflow-y: auto"></div>
     </div>
 
     <div id="ref-wrap">
@@ -169,7 +184,7 @@
       <button onclick="newRef()">New Reference</button>
       <button onclick="newStep()">Add Step</button>
       <button onclick="saveTop()">Save</button>
-      <div id="ref-res" style="width: 100%; height: calc(100% - 50px); overflow-y: auto"></div>
+      <div id="ref-res" style="position: absolute; width: 100%; height: auto; overflow-y: auto"></div>
     </div>
 
     <div id="to-wrap">
@@ -219,9 +234,11 @@
         <h2>Export</h2>
         <p>System: <select id="system"></select></p>
         <p>TO Reference: <input type="text" id="to" placeholder="TO Reference"></p>
-        <p>Component Work Unit Code: <input type="text" id="WUC" placeholder="WUC"><p id="WUCOut"></p><br> (for multiple WUCs, seperate by comma)</p>
+        <p>Component Work Unit Code: <input type="text" id="WUC" placeholder="WUC"><p id="WUCOut"></p><br></p>
         <p>Part Number: <input type="text" id="pn" placeholder="Part Number"></p>
         <p>Component Description: <br><textarea rows="5" cols="58" type="text" id="desc" placeholder="Part numbers, component description, R/I TO directory, etc"></textarea></p>
+        <button onclick="addRelated()">Add Related Component</button>
+        <div id="rel-list"></div>
         <button onclick="exportJSON()">Submit</button><br><br>
       </div>
       <div class="popup" id="settings">
@@ -359,7 +376,36 @@
           document.getElementById('db-stat').innerHTML = "DB Status: loaded"
           db = await getJSON(a, 'editDB')
           updateTop()
+          loadEditor()
         }
+      }
+
+      // Text Editor
+      let container = document.getElementById("area");
+
+      let editor = new JSONEditor(container, {
+          mode: "tree",
+          modes: ["tree", "code"],
+          mainMenuBar: true,
+          navigationBar: true
+      });
+
+      function saveJSONtext() {
+        try {
+          let textarea = editor.get()
+
+          saveJSON(indexed, "editDB", textarea)
+        } catch(err) {
+          alert(err)
+        }
+      }
+
+      async function loadEditor() {
+        let textarea = document.getElementById('area')
+        let json = await getJSON(indexed, 'editDB')
+        let text = json
+
+        editor.set(text);
       }
 
       // TO Search
@@ -854,6 +900,7 @@
       let rota = document.getElementById('rota')
       let sys = document.getElementById('system')
       let pencil = false
+      let relatedParts = []
       let WUC = [] // Work Unit Codes for naming verification
       let latch = {
         'line': {
@@ -877,18 +924,9 @@
       rota.value = rot
 
       async function getWUC() {
-        const url = "/db.json";
-        try {
-          const response = await fetch(url);
-          if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-          }
-
-          const result = await response.json();
-          WUC = result.WUC
-        } catch (error) {
-          console.error(error.message);
-        }
+        window.setTimeout(function() {
+          WUC = db.WUC
+        }, 1500)
       }
       getWUC()
 
@@ -1001,6 +1039,73 @@
           document.getElementById('pencilMode').style.backgroundColor = "#000000"
           document.getElementById('pencilMode').style.color = "#FFFFFF"
         }
+      }
+      function addRelated() {
+        let win = newDragBox({width: 400, height: 500})
+        let parent = win.win
+        let res = document.getElementById('rel-list')
+        let nomen = document.createElement('input')
+        let ref = document.createElement('input')
+        let wuc = document.createElement('input')
+        let pNum = document.createElement('input')
+        let desc = document.createElement('textarea')
+        let submit = document.createElement('button')
+        let addLabel = (name) => {
+          let l = document.createElement('span')
+          l.textContent = name
+          l.prepend(document.createElement('br'))
+          return l
+        }
+
+        res.style.width = "400px"
+
+        submit.textContent = "Submit"
+
+        submit.onclick = () => {
+          win.remove()
+
+          relatedParts.push({
+            nomen: nomen.value,
+            ref: ref.value,
+            wuc: wuc.value,
+            pNum: pNum.value,
+            desc: desc.value
+          })
+
+          let div = document.createElement('div')
+          let span = document.createElement('span')
+          let x = document.createElement('button')
+
+          span.textContent = nomen.value
+          x.textContent = 'x'
+
+          x.style = "width: 19px; height: 19px; text-align: center; padding: 0px; float: right"
+          span.setAttribute('id', "f" + relatedParts.length)
+
+          x.onclick = function() {
+            relatedParts.splice(parseInt(span.id.slice(1)) - 1, 1);
+            div.remove()
+          }
+
+          div.appendChild(span)
+          div.appendChild(x)
+          res.appendChild(div)
+        }
+        parent.appendChild(addLabel("Nomenclature"))
+        parent.appendChild(nomen)
+
+        parent.appendChild(addLabel("TO Reference"))
+        parent.appendChild(ref)
+
+        parent.appendChild(addLabel("WUC"))
+        parent.appendChild(wuc)
+
+        parent.appendChild(addLabel("Part Number"))
+        parent.appendChild(pNum)
+
+        parent.appendChild(addLabel("Part Description"))
+        parent.appendChild(desc)
+        parent.appendChild(submit)
       }
       function newDrawing() {
         camera.position.set(0, 50, 0)
@@ -1141,7 +1246,7 @@
         let grabbed = false
         let grabOff = [0, 0]
 
-        wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 50; left: 50; border: 2px solid #000000`
+        wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 50; left: 50; border: 2px solid #000000; z-index: 999999`
         grab.style = `background-color: gray; height: 20px; width: ${options.width - 20}px; touch-action: none`
         close.style = 'background-color: white; width: 20px; height: 20px; margin-right: -20px; float: right; cursor: pointer; text-align: center'
         content.style = `height: ${options.height - 20}px; width: ${options.width}px;`
@@ -1431,6 +1536,7 @@
           WUC: document.getElementById('WUC').value,
           section: document.getElementById('system').value,
           pn: document.getElementById('pn').value,
+          related: relatedParts,
           modelData: {
             vertices: vertices,
             faces: faces,
@@ -1456,6 +1562,7 @@
 
         db.components.push(json)
         saveJSON(indexed, 'editDB', db)
+        relatedParts = []
       }
       function place() {
         document.getElementById('placeSettings').style.display = 'none'
