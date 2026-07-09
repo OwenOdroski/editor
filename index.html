@@ -8,6 +8,7 @@
     <link rel="manifest" href="/manifest2.json">
     <link href="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.js"></script>
+    <script src="./three-csg.js" type="module"></script>
   </head>
   <style>
     #canvas {
@@ -256,7 +257,11 @@
     <script src="./three.js"></script>
     <script src="./Orbit.js"></script>
     <script src="./Loader.js"></script>
+    <script src="./csg-lib.js"></script>
+    <script src="./csg-worker.js"></script>
+    <script src="./three-csg.js"></script>
     <script>
+
       // DB Handling
       const DB_NAME = "index"
       const DB_VERSION = 1
@@ -885,6 +890,7 @@
       canvas.width = window.innerWidth
       canvas.height = window.innerHeight
 
+      let createdMesh
       let type = 'line'
       let history = []
       let points = [] // Arr of objects explaining types of each addition
@@ -901,6 +907,7 @@
       let sys = document.getElementById('system')
       let pencil = false
       let relatedParts = []
+      let modelGroup = new THREE.Group()
       let WUC = [] // Work Unit Codes for naming verification
       let latch = {
         'line': {
@@ -1107,10 +1114,11 @@
         parent.appendChild(desc)
         parent.appendChild(submit)
       }
+      scene.add(modelGroup)
       function newDrawing() {
         camera.position.set(0, 50, 0)
         controls.update()
-        history = []
+        //history = []
         points = []
         document.getElementById('placeSettings').style.display = 'none'
         document.getElementById('drawSettings').style.display = 'block'
@@ -1144,35 +1152,6 @@
       function degToRad(deg) {
         return deg * (Math.PI / 180)
       }
-      let isCentering = false
-
-      function center() {
-        try {
-          selectedObj.geometry.computeBoundingBox();
-
-          const center = new THREE.Vector3();
-          selectedObj.geometry.boundingBox.getCenter(center);
-
-          selectedObj.geometry.translate(
-            -center.x,
-            -center.y,
-            -center.z
-          );
-          selectedObj.children[0].geometry.translate(
-            -center.x,
-            -center.y,
-            -center.z
-          );
-
-          selectedObj.geometry.computeBoundingBox();
-          selectedObj.geometry.computeBoundingSphere();
-          document.getElementById('message').textContent = ''
-        } catch(err) {
-          document.getElementById('message').textContent = 'Select Object'
-
-          isCentering = true
-        }
-      }
 
       c.addEventListener('mousedown', function(event) {
         pointer.x = (event.clientX / c.clientWidth) * 2 - 1;
@@ -1180,19 +1159,10 @@
 
         raycaster.setFromCamera(pointer, camera);
 
-        const intersects = raycaster.intersectObject(scene, true);
+        const intersects = raycaster.intersectObjects(modelGroup.children, true);
 
-        for(let curr of intersects) {
-          if(isCentering && curr.object.name == "draw") {
-            selectedObj = curr.object
-            isCentering = false
-            center()
-            return
-          } else if(curr.object.name == "draw") {
-            selectedObj = curr.object
-            initExWin(curr.object)
-            return
-          }
+        if(intersects.length != 0) {
+          initExWin(modelGroup.children[0])
         }
       })
       function cancel() {
@@ -1328,7 +1298,50 @@
         return contentArray
       }
 
-      let createdMesh
+      function subtractMesh(target, cutter) {
+        target.updateMatrix();
+        cutter.updateMatrix();
+
+        let a = CSG.fromMesh(target);
+        let b = CSG.fromMesh(cutter);
+
+        let resultCSG = a.subtract(b);
+        let result = CSG.toMesh(resultCSG, target.matrix, target.material);
+
+        result.geometry.computeVertexNormals();
+
+        target.parent.remove(target);
+
+        return result;
+      }
+
+      function unionMesh(meshA, meshB) {
+        meshA.updateMatrix();
+        meshB.updateMatrix();
+
+        let a = CSG.fromMesh(meshA);
+        let b = CSG.fromMesh(meshB);
+
+        let resultCSG = a.union(b);
+
+        let result = CSG.toMesh(
+          resultCSG,
+          meshA.matrix,
+          meshA.material
+        );
+
+        result.geometry.computeVertexNormals();
+
+        if(meshA.parent) {
+          meshA.parent.remove(meshA);
+        }
+
+        if(meshB.parent) {
+          meshB.parent.remove(meshB);
+        }
+
+        return result;
+      }
 
       function initExWin(mesh) {
         const curr = mesh || createdMesh;
@@ -1340,9 +1353,63 @@
 
         // Create settings window
         const win = newDragBox().win;
-        const tabs = createTabs(['POS', 'SCALE', 'ROT'], win);
+        const tabs = createTabs(['MESH', 'POS', 'SCALE', 'ROT'], win);
 
         const inputs = {};
+
+        // Create custom HTML for "mesh" tab
+        let meshName = document.createElement("p")
+        let remove = document.createElement("select")
+        let del = document.createElement("button")
+
+        meshName.textContent = curr.name
+        del.textContent = "Delete Mesh"
+
+        remove.innerHTML = "<option>Add</option><option>Subtract</option>"
+
+        function createLines(geometry) {
+          const edges = new THREE.EdgesGeometry(geometry);
+          const line = new THREE.LineSegments(
+            edges,
+            new THREE.LineBasicMaterial({ color: 0x000000 })
+          );
+          return line
+        }
+
+        remove.addEventListener('change', () => {
+          if(remove.selectedIndex == 0) {
+            // Add
+            if(modelGroup.children.length == 0) {
+              // No possible parent
+              modelGroup.add(curr)
+              expMesh = curr
+            } else if(modelGroup.children.length == 1) {
+              // Add to the only object on the scene (if more than one, throw error)
+              modelGroup.add(unionMesh(modelGroup.children[0], curr))
+              modelGroup.children[0].add(createLines(modelGroup.children[0].geometry))
+            } else {
+              alert("Error creating mesh: more than one unique mesh in the scene")
+            }
+          } else if(remove.selectedIndex == 1){
+            // Remove
+            if(modelGroup.children.length != 0) {
+              modelGroup.add(subtractMesh(modelGroup.children[0], curr))
+              modelGroup.children[0].add(createLines(modelGroup.children[0].geometry))
+            }
+          }
+        })
+        remove.dispatchEvent(new Event("change"));
+
+        del.onclick = function() {
+          modelGroup.remove(curr);
+          curr.geometry.dispose();
+          curr.material.dispose();
+          win.remove()
+        }
+
+        tabs[0].appendChild(meshName)
+        tabs[0].appendChild(remove)
+        tabs[0].appendChild(del)
 
         function update() {
             saveAdjust(
@@ -1355,7 +1422,7 @@
         const groups = [
             {
                 name: 'pos',
-                tab: tabs[0],
+                tab: tabs[1],
                 values: {
                     x: curr.position.x,
                     y: curr.position.y,
@@ -1364,7 +1431,7 @@
             },
             {
                 name: 'scale',
-                tab: tabs[1],
+                tab: tabs[2],
                 values: {
                     x: curr.scale.x,
                     y: curr.scale.y,
@@ -1373,7 +1440,7 @@
             },
             {
                 name: 'rot',
-                tab: tabs[2],
+                tab: tabs[3],
                 values: {
                     x: radToDeg(curr.rotation.x),
                     y: radToDeg(curr.rotation.y),
@@ -1681,8 +1748,8 @@
           const material = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: false } );
           const mesh = new THREE.Mesh( geometry, material ) ;
           mesh.rotation.x = Math.PI / 2
-          mesh.name = 'draw'
-          scene.add( mesh );
+          mesh.name = 'draw' + Math.floor(Math.random() * 1000)
+          //modelGroup.add( mesh );
 
           const edges = new THREE.EdgesGeometry(geometry);
           const line = new THREE.LineSegments(
@@ -1871,10 +1938,10 @@
 
       let activePointerId = null;
 
-    canvas.addEventListener('pointerdown', pointerDown);
-    canvas.addEventListener('pointermove', pointerMove);
-    canvas.addEventListener('pointerup', pointerUp);
-    canvas.addEventListener('pointercancel', pointerUp);
+      canvas.addEventListener('pointerdown', pointerDown);
+      canvas.addEventListener('pointermove', pointerMove);
+      canvas.addEventListener('pointerup', pointerUp);
+      canvas.addEventListener('pointercancel', pointerUp);
 
       function draw3PointArc(p1, p2, p3) {
         // Calculate circle center
