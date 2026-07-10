@@ -214,7 +214,6 @@
           <button onclick="cancel()">Cancel</button>
           <button onclick="undo()">Undo</button>
           <button onclick="redo()">Redo</button>
-          <button onclick="pencilMode()" id="pencilMode">Apple Pencil Mode</button>
         </div>
         <div id="placeSettings">
           <div class="spacer"></div>
@@ -222,6 +221,7 @@
           <button onclick="document.getElementById('settings').style.display='block'">Settings</button>
           <button onclick="newDrawing()">New Drawing</button>
           <button onclick="place()">Place</button>
+          <button onclick="splitMode()" id="split-mode">Split Mode</button>
           <p id="message"></p>
         </div>
         <div id="final">
@@ -905,7 +905,6 @@
       let move = document.getElementById('mov')
       let rota = document.getElementById('rota')
       let sys = document.getElementById('system')
-      let pencil = false
       let relatedParts = []
       let modelGroup = new THREE.Group()
       let WUC = [] // Work Unit Codes for naming verification
@@ -921,6 +920,7 @@
         x: 0,
         y: 0
       }
+      modelGroup.visible = false
 
       let comp = new THREE.Group()
       scene.add(comp)
@@ -1035,16 +1035,23 @@
       let raycaster = new THREE.Raycaster()
       let pointer = new THREE.Vector2()
       let selectedObj
+      let split = false
+      let finalMesh = new THREE.Group()
+      scene.add(finalMesh)
 
-      function pencilMode() {
-        if(pencil) {
-          pencil = false
-          document.getElementById('pencilMode').style.backgroundColor = "#FFFFFF"
-          document.getElementById('pencilMode').style.color = "#000000"
-        } else if(!pencil) {
-          pencil = true
-          document.getElementById('pencilMode').style.backgroundColor = "#000000"
-          document.getElementById('pencilMode').style.color = "#FFFFFF"
+      function splitMode() {
+        if(split) {
+          split = false
+          document.getElementById('split-mode').style.backgroundColor = '#FFFFFF'
+          document.getElementById('split-mode').style.color = '#000000'
+          modelGroup.visible = false
+          finalMesh.visible = true
+        } else if(!split) {
+          split = true
+          document.getElementById('split-mode').style.backgroundColor = '#000000'
+          document.getElementById('split-mode').style.color = '#FFFFFF'
+          modelGroup.visible = true
+          finalMesh.visible = false
         }
       }
       function addRelated() {
@@ -1126,23 +1133,27 @@
         update()
       }
 
-      function saveAdjust(posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ) {
+      function saveAdjust(posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, m) {
         if(selectedObj == undefined) {
           alert('No object was found when saving')
           return
         }
         try {
-          selectedObj.position.x = JSON.parse(posX.value)
-          selectedObj.position.y = JSON.parse(posY.value)
-          selectedObj.position.z = JSON.parse(posZ.value)
+          let mesh = m
+          if(!m) {
+            mesh = modelGroup.children[0]
+          }
+          mesh.position.x = JSON.parse(posX.value)
+          mesh.position.y = JSON.parse(posY.value)
+          mesh.position.z = JSON.parse(posZ.value)
 
-          selectedObj.rotation.x = degToRad(JSON.parse(rotX.value))
-          selectedObj.rotation.y = degToRad(JSON.parse(rotY.value))
-          selectedObj.rotation.z = degToRad(JSON.parse(rotZ.value))
+          mesh.rotation.x = degToRad(JSON.parse(rotX.value))
+          mesh.rotation.y = degToRad(JSON.parse(rotY.value))
+          mesh.rotation.z = degToRad(JSON.parse(rotZ.value))
 
-          selectedObj.scale.x = JSON.parse(scaleX.value)
-          selectedObj.scale.y = JSON.parse(scaleY.value)
-          selectedObj.scale.z = JSON.parse(scaleZ.value)
+          mesh.scale.x = JSON.parse(scaleX.value)
+          mesh.scale.y = JSON.parse(scaleY.value)
+          mesh.scale.z = JSON.parse(scaleZ.value)
         } catch(err) {}
       }
 
@@ -1162,7 +1173,11 @@
         const intersects = raycaster.intersectObjects(modelGroup.children, true);
 
         if(intersects.length != 0) {
-          initExWin(modelGroup.children[0])
+          if(intersects[0].object.type == "LineSegments") {
+            initExWin(intersects[0].object.parent)
+          } else if(intersects[0].name[0] == "d") {
+            initExWin(intersects[0].object)
+          }
         }
       })
       function cancel() {
@@ -1310,8 +1325,6 @@
 
         result.geometry.computeVertexNormals();
 
-        target.parent.remove(target);
-
         return result;
       }
 
@@ -1331,14 +1344,6 @@
         );
 
         result.geometry.computeVertexNormals();
-
-        if(meshA.parent) {
-          meshA.parent.remove(meshA);
-        }
-
-        if(meshB.parent) {
-          meshB.parent.remove(meshB);
-        }
 
         return result;
       }
@@ -1375,28 +1380,24 @@
           );
           return line
         }
+        if(!mesh) {
+          modelGroup.add(curr)
+          createLines(curr.geometry)
+        }
 
         remove.addEventListener('change', () => {
-          if(remove.selectedIndex == 0) {
-            // Add
-            if(modelGroup.children.length == 0) {
-              // No possible parent
-              modelGroup.add(curr)
-              expMesh = curr
-            } else if(modelGroup.children.length == 1) {
-              // Add to the only object on the scene (if more than one, throw error)
-              modelGroup.add(unionMesh(modelGroup.children[0], curr))
-              modelGroup.children[0].add(createLines(modelGroup.children[0].geometry))
-            } else {
-              alert("Error creating mesh: more than one unique mesh in the scene")
+          if(remove.selectedIndex == 0) { // add
+            curr.userData = {
+              type: "add"
             }
-          } else if(remove.selectedIndex == 1){
-            // Remove
-            if(modelGroup.children.length != 0) {
-              modelGroup.add(subtractMesh(modelGroup.children[0], curr))
-              modelGroup.children[0].add(createLines(modelGroup.children[0].geometry))
+            curr.material.color = new THREE.Color(0x00FF00)
+          } else if(remove.selectedIndex == 1){ // subtract
+            curr.userData = {
+              type: "subtract"
             }
+            curr.material.color = new THREE.Color(0xFF0000)
           }
+          createFull()
         })
         remove.dispatchEvent(new Event("change"));
 
@@ -1415,8 +1416,53 @@
             saveAdjust(
                 inputs.posX, inputs.posY, inputs.posZ,
                 inputs.scaleX, inputs.scaleY, inputs.scaleZ,
-                inputs.rotX, inputs.rotY, inputs.rotZ
+                inputs.rotX, inputs.rotY, inputs.rotZ, curr
             );
+            createFull()
+        }
+        function createFull() {
+          // Remove the old generated result
+          while (finalMesh.children.length > 0) {
+            const old = finalMesh.children[0];
+            finalMesh.remove(old);
+
+            old.traverse(obj => {
+              if (obj.geometry) obj.geometry.dispose();
+
+              if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                  obj.material.forEach(material => material.dispose());
+                } else {
+                  obj.material.dispose();
+                }
+              }
+            });
+          }
+
+          if (modelGroup.children.length === 0) {
+            return;
+          }
+
+          // Start with a clone so the original stays inside modelGroup
+          let result = modelGroup.children[0].clone();
+          result.geometry = modelGroup.children[0].geometry.clone();
+
+          for (let i = 1; i < modelGroup.children.length; i++) {
+            const operationMesh = modelGroup.children[i];
+
+            if (operationMesh.userData.type === "add") {
+              result = unionMesh(result, operationMesh);
+            } else if (operationMesh.userData.type === "subtract") {
+              result = subtractMesh(result, operationMesh);
+            } else {
+              console.log("user data not found", operationMesh);
+            }
+          }
+
+          const lines = createLines(result.geometry);
+          result.add(lines);
+
+          finalMesh.add(result);
         }
 
         const groups = [
@@ -1771,14 +1817,6 @@
         }
       }
 
-      function shouldDraw(e) {
-          // If pencil mode is ON, only Apple Pencil/pen draws
-          if (pencil && e.pointerType !== 'pen') return false;
-
-          // If pencil mode is OFF, allow mouse/touch/pen like normal
-          return true;
-      }
-
       function getCanvasPoint(e) {
           const rect = canvas.getBoundingClientRect();
 
@@ -1789,8 +1827,6 @@
       }
 
       function pointerMove(e) {
-          if (!shouldDraw(e)) return;
-
           const mouse = getCanvasPoint(e);
           let found = false;
 
@@ -1824,8 +1860,6 @@
       }
 
       function pointerDown(e) {
-          if (!shouldDraw(e)) return;
-
           e.preventDefault();
 
           activePointerId = e.pointerId;
@@ -1878,13 +1912,12 @@
 
       function pointerUp(e) {
           if (activePointerId !== e.pointerId) return;
-          if (!shouldDraw(e)) return;
 
           e.preventDefault();
 
           const p = getCanvasPoint(e);
 
-          if (pencil && phase === 0 && type === 'line') {
+          if (phase === 0 && type === 'line') {
               phase = -1;
               points[points.length - 1].cords.push({ x: p.x, y: p.y });
               points[points.length - 1].finished = true;
