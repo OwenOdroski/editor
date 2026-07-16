@@ -55,17 +55,23 @@
      button {
        padding: 8px;
        background-color: white;
-       border: 2px solid #000000
+       border: 2px solid #000000;
+       color: black;
+       margin-top: 8px
      }
      input[type="text"] {
        padding: 8px;
        background-color: white;
-       border: 2px solid #000000
+       border: 2px solid #000000;
+       color: black;
+       margin-top: 8px
      }
      select {
        padding: 8px;
        background-color: white;
-       border: 2px solid #000000
+       border: 2px solid #000000;
+       color: black;
+       margin-top: 8px
      }
      #message {
        display: inline-block;
@@ -2455,19 +2461,62 @@
 
         return groups;
       }
-      window.addEventListener('resize', () => {
-        // 1. Update dimensions
-        const width = window.innerWidth;
-        const height = window.innerHeight;
+      function resizeRenderer() {
+        const viewport = window.visualViewport;
 
-        // 2. Update camera aspect ratio
-        camera.aspect = width / height;
+        const width = Math.round(viewport?.width || window.innerWidth);
+        const height = Math.round(viewport?.height || window.innerHeight);
+        const aspect = width / height;
+
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(width, height, false);
+
+        renderer.domElement.style.width = `${width}px`;
+        renderer.domElement.style.height = `${height}px`;
+
+        if (camera.isPerspectiveCamera) {
+          camera.aspect = aspect;
+        }
+
+        if (camera.isOrthographicCamera) {
+          const viewHeight = 1000;
+
+          camera.left = -(viewHeight * aspect) / 2;
+          camera.right = (viewHeight * aspect) / 2;
+          camera.top = viewHeight / 2;
+          camera.bottom = -viewHeight / 2;
+        }
+
         camera.updateProjectionMatrix();
 
-        // 3. Update renderer and canvas size
-        renderer.setSize(width, height);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      });
+        // Your drawing canvas also needs to match.
+        canvas.width = Math.round(width * window.devicePixelRatio);
+        canvas.height = Math.round(height * window.devicePixelRatio);
+
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+
+        ctx.setTransform(
+          window.devicePixelRatio,
+          0,
+          0,
+          window.devicePixelRatio,
+          0,
+          0
+        );
+
+        update();
+      }
+
+      window.addEventListener("resize", resizeRenderer);
+      window.addEventListener("orientationchange", resizeRenderer);
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", resizeRenderer);
+        window.visualViewport.addEventListener("scroll", resizeRenderer);
+      }
+
+      resizeRenderer();
     </script>
   </body>
 </html>
