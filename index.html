@@ -127,6 +127,7 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
+      <p>APP VERSION: 1.1.8</p>
       <input type="file" accept=".json" id="newFile"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <br><br>
@@ -912,9 +913,6 @@
       let canvas = document.querySelector('#drawCanvas')
       let ctx = canvas.getContext('2d')
 
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
-
       let createdMesh
       let type = 'line'
       let history = []
@@ -965,6 +963,26 @@
 
       const WUCFill = document.getElementById('WUC');
       const WUCOut = document.getElementById('WUCOut');
+
+      function resizeDrawCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+
+        canvas.width = Math.round(rect.width * dpr);
+        canvas.height = Math.round(rect.height * dpr);
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        update();
+      }
+
+      resizeDrawCanvas();
+
+      window.addEventListener("resize", resizeDrawCanvas);
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", resizeDrawCanvas);
+      }
 
       WUCFill.addEventListener('input', () => {
 
@@ -2149,7 +2167,7 @@
           activePointerId = e.pointerId;
           canvas.setPointerCapture(e.pointerId);
 
-          let p = getCanvasPoint(e);
+          const p = snapPoint(getCanvasPoint(e));
 
           if (latchHelper.x !== -5) {
               p.x = latchHelper.x;
@@ -2193,26 +2211,34 @@
 
           update();
       }
-
       function pointerUp(e) {
-          if (activePointerId !== e.pointerId) return;
+        if (activePointerId !== e.pointerId) return;
 
-          e.preventDefault();
+        e.preventDefault();
 
-          const p = getCanvasPoint(e);
+        const p = snapPoint(getCanvasPoint(e));
 
-          if (phase === 0 && type === 'line') {
-              phase = -1;
-              points[points.length - 1].cords.push({ x: p.x, y: p.y });
-              points[points.length - 1].finished = true;
-              history = [];
-          }
+        if (phase === 0 && type === "line") {
+          phase = -1;
 
-          activePointerId = null;
-          update();
+          points[points.length - 1].cords.push({
+            x: p.x,
+            y: p.y
+          });
+
+          points[points.length - 1].finished = true;
+          history = [];
+        }
+
+        activePointerId = null;
+        update();
       }
       function update() {
-        canvas.width = canvas.width
+        const dpr = window.devicePixelRatio || 1;
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         ctx.lineJoin = "round";
         ctx.lineCap = "round";
@@ -2259,6 +2285,15 @@
       canvas.addEventListener('pointermove', pointerMove);
       canvas.addEventListener('pointerup', pointerUp);
       canvas.addEventListener('pointercancel', pointerUp);
+
+      function snapPoint(p) {
+        if (latchHelper.x !== -5) {
+          p.x = latchHelper.x;
+          p.y = latchHelper.y;
+        }
+
+        return p;
+      }
 
       function draw3PointArc(p1, p2, p3) {
         // Calculate circle center
