@@ -145,6 +145,9 @@
       <button onclick="document.getElementById('ref-wrap').style.display = 'block'">References</button>
       <button onclick="document.getElementById('to-wrap').style.display = 'block'">TO Search</button>
       <button onclick="document.getElementById('json-wrap').style.display = 'block'">Edit File</button>
+
+      <h4>System Options</h4>
+      <button onclick="forceUpdateApp()">Update App</button>
     </div>
 
     <div id="json-wrap">
@@ -237,12 +240,7 @@
           <details style="position: fixed; top: 0; right: 0; background-color: white; padding: 8px; margin-top: 8px; width: 200px; border: 2px solid #000000">
             <summary>Ordering</summary>
             <div style="height: 100%; overflow-y: scroll; background-color: white; width: 200px">
-              <ul id="place-order">
-                <li draggable="true">Item 1</li>
-                <li draggable="true">Item 2</li>
-                <li draggable="true">Item 3</li>
-                <li draggable="true">Item 4</li>
-              </ul>
+              <ul id="place-order"></ul>
             </div>
           </details>
           <p id="message"></p>
@@ -271,6 +269,7 @@
         </div>
       </div>
       <div class="popup" id="export">
+        <button onclick="document.getElementById('export').style.display='none'">Close</button>
         <h2>Export</h2>
         <p>System: <select id="system"></select></p>
         <p>TO Reference: <input type="text" id="to" placeholder="TO Reference"></p>
@@ -308,6 +307,43 @@
 
       var db = false
       var indexed = undefined
+
+      async function forceUpdateApp() {
+        try {
+          // Delete Cache Storage caches
+          if ("caches" in window) {
+            const cacheNames = await caches.keys();
+
+            await Promise.all(
+              cacheNames.map(cacheName => caches.delete(cacheName))
+            );
+          }
+
+          // Remove any old service workers
+          if ("serviceWorker" in navigator) {
+            const registrations =
+              await navigator.serviceWorker.getRegistrations();
+
+            await Promise.all(
+              registrations.map(registration =>
+                registration.unregister()
+              )
+            );
+          }
+
+          // IndexedDB is not touched.
+
+          // Reload using a unique URL so Safari must request the page again.
+          const url = new URL(window.location.href);
+
+          url.searchParams.set("_update", Date.now());
+
+          window.location.replace(url.toString());
+        } catch (error) {
+          console.error("Update failed:", error);
+          alert("The update failed. Try closing and reopening the app.");
+        }
+      }
 
       function hasJSON(db, tag) {
         return new Promise((resolve, reject) => {
@@ -1250,6 +1286,7 @@
         cameraOrtho.updateProjectionMatrix();
         scene.scale.set(1, 1, 1)
         camera.lookAt(0, 0, 0)
+        camera.rotation.y = 0
 
         update()
       }
@@ -1963,6 +2000,7 @@
           WUC: document.getElementById('WUC').value,
           section: document.getElementById('system').value,
           pn: document.getElementById('pn').value,
+          d: new Date(),
           related: relatedParts,
           modelData: {
             vertices: vertices,
