@@ -229,6 +229,22 @@
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
           <button onclick="document.getElementById('settings').style.display='block'">Settings</button>
           <button onclick="document.getElementById('export').style.display='block'">Export</button>
+          <select id="preset-loc">
+            <option>-- None Selected --</option>
+            <option>Left MLG</option>
+            <option>Right MLG</option>
+            <option>NLG</option>
+            <option>Forward Nacelle</option>
+            <option>Middle Nacelle</option>
+            <option>Aft Nacelle</option>
+            <option>Left Wing Tip</option>
+            <option>Right Wing Tip</option>
+            <option>Vertical Stabalizer</option>
+            <option>Dorsal Fairing</option>
+            <option>Cockpit</option>
+            <option>Equipment Bay</option>
+            <option>Spine</option>
+          </select>
         </div>
       </div>
       <div class="popup" id="export">
@@ -856,12 +872,15 @@
       let c = document.querySelector('#canvas')
       scene.background = new THREE.Color(0xFFFFFF)
 
-      let camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
+      let cameraOrtho = new THREE.OrthographicCamera( innerWidth / - 2, innerWidth / 2, innerHeight / 2, innerHeight / - 2, 0.0001, 10000 );
+      let cameraPersp = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
+      let camera = cameraOrtho
       let renderer = new THREE.WebGLRenderer({ antialias: true, canvas: c });
       renderer.setSize(innerWidth, innerHeight);
 
-      let controls = new THREE.OrbitControls(camera, renderer.domElement);
-      camera.position.set(0, 50, 0)
+      let controls = new THREE.OrbitControls(cameraPersp, renderer.domElement);
+      camera.position.set(0, 10, 0)
+      camera.lookAt(0, 0, 0)
 
       let light = new THREE.AmbientLight(0xffffff, 0.5);
       scene.add(light);
@@ -873,7 +892,7 @@
       scene.add(meshes)
 
       const grid = new THREE.GridHelper(
-        100, // size
+        1000, // size
         10,  // divisions
         0x000000,
         0x000000
@@ -908,6 +927,7 @@
       let relatedParts = []
       let modelGroup = new THREE.Group()
       let WUC = [] // Work Unit Codes for naming verification
+      let placeSettings = false
       let latch = {
         'line': {
           count: 2
@@ -1123,13 +1143,22 @@
       }
       scene.add(modelGroup)
       function newDrawing() {
-        camera.position.set(0, 50, 0)
+        camera.position.set(0, 10, 0)
         controls.update()
         //history = []
         points = []
         document.getElementById('placeSettings').style.display = 'none'
         document.getElementById('drawSettings').style.display = 'block'
         canvas.style.display = 'block'
+
+        // Set camera to OrthographicCamera
+        cameraOrtho.position.copy(cameraPersp.position);
+        cameraOrtho.quaternion.copy(cameraPersp.quaternion);
+
+        camera = cameraOrtho
+        scene.scale.set(1, 1, 1)
+        camera.lookAt(0, 0, 0)
+
         update()
       }
 
@@ -1170,13 +1199,25 @@
 
         raycaster.setFromCamera(pointer, camera);
 
-        const intersects = raycaster.intersectObjects(modelGroup.children, true);
+        if(!placeSettings) {
+          const intersects = raycaster.intersectObjects(modelGroup.children, true);
 
-        if(intersects.length != 0) {
-          if(intersects[0].object.type == "LineSegments") {
-            initExWin(intersects[0].object.parent)
-          } else if(intersects[0].name[0] == "d") {
-            initExWin(intersects[0].object)
+          if(intersects.length != 0) {
+            if(intersects[0].object.type == "LineSegments") {
+              initExWin(intersects[0].object.parent)
+            } else if(intersects[0].name[0] == "d") {
+              initExWin(intersects[0].object)
+            }
+          }
+        } else {
+          const intersects = raycaster.intersectObjects(comp.children, true);
+
+          if(intersects.length != 0) {
+            if(intersects[0].object.type == "LineSegments") {
+              openFinalPositioning(intersects[0].object.parent)
+            } else {
+              openFinalPositioning(intersects[0].object)
+            }
           }
         }
       })
@@ -1188,6 +1229,194 @@
           }
         }
         update()
+      }
+
+      function openFinalPositioning(mesh, onUpdate = null) {
+        if (!mesh || !mesh.isObject3D) {
+          throw new Error("openFinalPositioning requires a THREE.Object3D or mesh.");
+        }
+
+        const win = newDragBox().win;
+        const tabs = createTabs(["POS", "SCALE", "ROT"], win);
+        const inputs = {};
+
+        const initialScale = mesh.scale.clone();
+
+        function runUpdateCallback() {
+          if (typeof onUpdate === "function") {
+            onUpdate(mesh);
+          }
+        }
+
+        function updatePosition() {
+          mesh.position.set(
+            Number(inputs.posX.value) || 0,
+            Number(inputs.posY.value) || 0,
+            Number(inputs.posZ.value) || 0
+          );
+
+          runUpdateCallback();
+        }
+
+        function updateRotation() {
+          mesh.rotation.set(
+            degToRad(Number(inputs.rotX.value) || 0),
+            degToRad(Number(inputs.rotY.value) || 0),
+            degToRad(Number(inputs.rotZ.value) || 0)
+          );
+
+          runUpdateCallback();
+        }
+
+        function updateScale(changedAxis) {
+          const uniform = inputs.uniformScale.checked;
+
+          if (uniform) {
+            /*
+             * Copy the changed scale multiplier into all three inputs.
+             */
+            const value = Number(inputs[`scale${changedAxis}`].value);
+
+            const multiplier = Number.isFinite(value) ? value : 1;
+
+            inputs.scaleX.value = multiplier;
+            inputs.scaleY.value = multiplier;
+            inputs.scaleZ.value = multiplier;
+          }
+
+          const scaleX = Number(inputs.scaleX.value);
+          const scaleY = Number(inputs.scaleY.value);
+          const scaleZ = Number(inputs.scaleZ.value);
+
+          mesh.scale.set(
+            initialScale.x * (Number.isFinite(scaleX) ? scaleX : 1),
+            initialScale.y * (Number.isFinite(scaleY) ? scaleY : 1),
+            initialScale.z * (Number.isFinite(scaleZ) ? scaleZ : 1)
+          );
+
+          runUpdateCallback();
+        }
+
+        function createNumberInput({
+          tab,
+          group,
+          axis,
+          value,
+          update
+        }) {
+          const label = document.createElement("label");
+          const input = document.createElement("input");
+          const id = `${group}${axis}`;
+
+          label.htmlFor = id;
+          label.textContent = axis.toUpperCase();
+
+          input.type = "number";
+          input.id = id;
+          input.className = "winInput";
+          input.value = value;
+          input.step = "any";
+
+          input.addEventListener("input", update);
+
+          inputs[`${group}${axis.toUpperCase()}`] = input;
+
+          tab.appendChild(label);
+          tab.appendChild(input);
+          tab.appendChild(document.createElement("br"));
+        }
+
+        /*
+         * Position controls
+         */
+        for (const axis of ["x", "y", "z"]) {
+          createNumberInput({
+            tab: tabs[0],
+            group: "pos",
+            axis,
+            value: mesh.position[axis],
+            update: updatePosition
+          });
+        }
+
+        /*
+         * Uniform-scale option
+         */
+        const uniformLabel = document.createElement("label");
+        const uniformScale = document.createElement("input");
+
+        uniformScale.type = "checkbox";
+        uniformScale.checked = true;
+        uniformScale.id = "uniformScale";
+
+        uniformLabel.htmlFor = uniformScale.id;
+        uniformLabel.textContent = "Uniform Scale";
+
+        inputs.uniformScale = uniformScale;
+
+        tabs[1].appendChild(uniformScale);
+        tabs[1].appendChild(uniformLabel);
+        tabs[1].appendChild(document.createElement("br"));
+        tabs[1].appendChild(document.createElement("br"));
+
+        /*
+         * Scale controls
+         *
+         * Each starts at 1 because these are multipliers applied to initialScale.
+         */
+        for (const axis of ["x", "y", "z"]) {
+          const axisUpper = axis.toUpperCase();
+
+          createNumberInput({
+            tab: tabs[1],
+            group: "scale",
+            axis,
+            value: 1,
+            update: () => updateScale(axisUpper)
+          });
+        }
+
+        /*
+         * Rotation controls
+         */
+        for (const axis of ["x", "y", "z"]) {
+          createNumberInput({
+            tab: tabs[2],
+            group: "rot",
+            axis,
+            value: radToDeg(mesh.rotation[axis]),
+            update: updateRotation
+          });
+        }
+
+        /*
+         * Optional reset button.
+         */
+        const resetButton = document.createElement("button");
+        resetButton.textContent = "Reset Scale";
+
+        resetButton.onclick = function () {
+          inputs.scaleX.value = 1;
+          inputs.scaleY.value = 1;
+          inputs.scaleZ.value = 1;
+
+          mesh.scale.copy(initialScale);
+
+          runUpdateCallback();
+        };
+
+        tabs[1].appendChild(resetButton);
+
+        /*
+         * Return useful references in case the calling code needs them.
+         */
+        return {
+          win,
+          tabs,
+          inputs,
+          mesh,
+          initialScale
+        };
       }
 
       function undo() {
@@ -1328,6 +1557,15 @@
         return result;
       }
 
+      function createLines(geometry) {
+        const edges = new THREE.EdgesGeometry(geometry);
+        const line = new THREE.LineSegments(
+          edges,
+          new THREE.LineBasicMaterial({ color: 0x000000 })
+        );
+        return line
+      }
+
       function unionMesh(meshA, meshB) {
         meshA.updateMatrix();
         meshB.updateMatrix();
@@ -1346,6 +1584,51 @@
         result.geometry.computeVertexNormals();
 
         return result;
+      }
+
+      function createFull() {
+        // Remove the old generated result
+        while (finalMesh.children.length > 0) {
+          const old = finalMesh.children[0];
+          finalMesh.remove(old);
+
+          old.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+
+            if (obj.material) {
+              if (Array.isArray(obj.material)) {
+                obj.material.forEach(material => material.dispose());
+              } else {
+                obj.material.dispose();
+              }
+            }
+          });
+        }
+
+        if (modelGroup.children.length === 0) {
+          return;
+        }
+
+        // Start with a clone so the original stays inside modelGroup
+        let result = modelGroup.children[0].clone();
+        result.geometry = modelGroup.children[0].geometry.clone();
+
+        for (let i = 1; i < modelGroup.children.length; i++) {
+          const operationMesh = modelGroup.children[i];
+
+          if (operationMesh.userData.type === "add") {
+            result = unionMesh(result, operationMesh);
+          } else if (operationMesh.userData.type === "subtract") {
+            result = subtractMesh(result, operationMesh);
+          } else {
+            console.log("user data not found", operationMesh);
+          }
+        }
+
+        const lines = createLines(result.geometry);
+        result.add(lines);
+
+        finalMesh.add(result);
       }
 
       function initExWin(mesh) {
@@ -1372,14 +1655,6 @@
 
         remove.innerHTML = "<option>Add</option><option>Subtract</option>"
 
-        function createLines(geometry) {
-          const edges = new THREE.EdgesGeometry(geometry);
-          const line = new THREE.LineSegments(
-            edges,
-            new THREE.LineBasicMaterial({ color: 0x000000 })
-          );
-          return line
-        }
         if(!mesh) {
           modelGroup.add(curr)
           createLines(curr.geometry)
@@ -1419,50 +1694,6 @@
                 inputs.rotX, inputs.rotY, inputs.rotZ, curr
             );
             createFull()
-        }
-        function createFull() {
-          // Remove the old generated result
-          while (finalMesh.children.length > 0) {
-            const old = finalMesh.children[0];
-            finalMesh.remove(old);
-
-            old.traverse(obj => {
-              if (obj.geometry) obj.geometry.dispose();
-
-              if (obj.material) {
-                if (Array.isArray(obj.material)) {
-                  obj.material.forEach(material => material.dispose());
-                } else {
-                  obj.material.dispose();
-                }
-              }
-            });
-          }
-
-          if (modelGroup.children.length === 0) {
-            return;
-          }
-
-          // Start with a clone so the original stays inside modelGroup
-          let result = modelGroup.children[0].clone();
-          result.geometry = modelGroup.children[0].geometry.clone();
-
-          for (let i = 1; i < modelGroup.children.length; i++) {
-            const operationMesh = modelGroup.children[i];
-
-            if (operationMesh.userData.type === "add") {
-              result = unionMesh(result, operationMesh);
-            } else if (operationMesh.userData.type === "subtract") {
-              result = subtractMesh(result, operationMesh);
-            } else {
-              console.log("user data not found", operationMesh);
-            }
-          }
-
-          const lines = createLines(result.geometry);
-          result.add(lines);
-
-          finalMesh.add(result);
         }
 
         const groups = [
@@ -1524,32 +1755,38 @@
         let height = 10
         let ext = extrude(points)
         if(ext.success) {
+          // Set camera to PerspectiveCamera
+          cameraPersp.position.copy(cameraOrtho.position);
+          cameraPersp.quaternion.copy(cameraOrtho.quaternion);
+
+          camera = cameraPersp
+          scene.scale.set(0.0172, 0.0172, 0.0172)
           document.getElementById('drawSettings').style.display = 'none'
           document.getElementById('placeSettings').style.display = 'inline-block'
           canvas.style.display = 'none'
           ext.geometry.computeBoundingBox();
 
-          const center = new THREE.Vector3();
-          ext.geometry.boundingBox.getCenter(center);
-
-          const offset = findOffset(center)
-
-          ext.geometry.translate(
-            -center.x,
-            -center.y,
-            -center.z
-          );
-          ext.lines.geometry.translate(
-            -center.x,
-            -center.y,
-            -center.z
-          );
-          ext.mesh.position.set(
-            offset.x * 0.1,
-            offset.z * 0.1,
-            offset.y * 0.1
-          );
-          ext.mesh.scale.set(0.1, 0.1, height)
+          // const center = new THREE.Vector3();
+          // ext.geometry.boundingBox.getCenter(center);
+          //
+          // const offset = findOffset(center)
+          //
+          // ext.geometry.translate(
+          //   -center.x,
+          //   -center.y,
+          //   -center.z
+          // );
+          // ext.lines.geometry.translate(
+          //   -center.x,
+          //   -center.y,
+          //   -center.z
+          // );
+          // ext.mesh.position.set(
+          //   offset.x * 0.1,
+          //   offset.z * 0.1,
+          //   offset.y * 0.1
+          // );
+          ext.mesh.scale.set(1, 1, height)
 
           expMesh = ext.mesh
           createdMesh = ext.mesh
@@ -1678,71 +1915,102 @@
         relatedParts = []
       }
       function place() {
-        document.getElementById('placeSettings').style.display = 'none'
-        document.getElementById('final').style.display = 'inline-block'
+        placeSettings = true
+        document.getElementById('placeSettings').style.display = 'none';
+        document.getElementById('final').style.display = 'inline-block';
 
-        plane.visible = true
-        grid.visible = false
-        comp.visible = true
+        plane.visible = true;
+        grid.visible = false;
+        comp.visible = true;
+
+        scene.scale.set(1, 1, 1);
+
+        // Keep the parent at scale 1 so child movement remains 1:1.
+        finalMesh.scale.set(1, 1, 1);
+
+        comp.add(finalMesh);
+
+        // Use the actual visible boolean-result mesh.
+        expMesh = finalMesh.children[0];
+
+        // Scale the mesh itself. An object's own scale does not shrink its position.
+        expMesh.scale.multiplyScalar(0.01);
+
+        let ref = [
+          undefined,
+          [11,-6.5,-5], // LMLG
+          [11,-6.5,3.5], // RMLG
+          [40.5,-8.5,0], // NLG
+          [3.5,-7.5,0.5], // F NACELLE
+          [-12.5,-7.5,0.5], // M NACELLE
+          [-31.5,-6,0.5], // A NACELLE
+          [-3.5,0.5,-46], // L WING TIP
+          [-3.5,0.5,46], // R WING TIP
+          [-41,30.5,0], // V STAB
+          [-16,7.5,0], // D FAIR
+          [60.5,5,0], // COCKPIT
+          [74.5,0,0], // EQUIP BAY
+          [24.5,6,0], // SPINE
+        ]
+
+        let select = document.getElementById('preset-loc')
+
+        select.addEventListener('change', () => {
+          let pos = ref[select.selectedIndex]
+
+          if(pos) {
+            expMesh.position.set(pos[0], pos[1], pos[2])
+
+            controls.target.copy(expMesh.position)
+            controls.update();
+          }
+        })
 
         window.onkeydown = function(e) {
+          if (inExport) return;
 
-          if(inExport) return
-          // Position
-          if(e.key == 'w') {
-            expMesh.position.z += unit
-          } else if(e.key == 's') {
-            expMesh.position.z -= unit
-          } else if(e.key == 'a') {
-            expMesh.position.x += unit
-          } else if(e.key == 'd') {
-            expMesh.position.x -= unit
-          } else if(e.key == 'q') {
-            expMesh.position.y -= unit
-          } else if(e.key == 'e') {
-            expMesh.position.y += unit
+          if (e.key == 'w') {
+            expMesh.position.z += unit;
+          } else if (e.key == 's') {
+            expMesh.position.z -= unit;
+          } else if (e.key == 'a') {
+            expMesh.position.x += unit;
+          } else if (e.key == 'd') {
+            expMesh.position.x -= unit;
+          } else if (e.key == 'q') {
+            expMesh.position.y -= unit;
+          } else if (e.key == 'e') {
+            expMesh.position.y += unit;
 
-            // Scale
-          } else if(e.key == 'z') {
-            expMesh.scale.x += scale
-          } else if(e.key == 'x') {
-            expMesh.scale.x -= scale
-          } else if(e.key == 'c') {
-            expMesh.scale.y += scale
-          } else if(e.key == 'v') {
-            expMesh.scale.y -= scale
-          } else if(e.key == 'b') {
-            expMesh.scale.z += scale
-          } else if(e.key == 'n') {
-            expMesh.scale.z += scale
+          } else if (e.key == 'z') {
+            expMesh.scale.x += scale;
+          } else if (e.key == 'x') {
+            expMesh.scale.x -= scale;
+          } else if (e.key == 'c') {
+            expMesh.scale.y += scale;
+          } else if (e.key == 'v') {
+            expMesh.scale.y -= scale;
+          } else if (e.key == 'b') {
+            expMesh.scale.z += scale;
+          } else if (e.key == 'n') {
+            expMesh.scale.z -= scale;
 
-            // Rotate
-          } else if(e.key == 'r') {
-            const axis = new THREE.Vector3(1, 0, 0);
-
-            expMesh.rotateOnWorldAxis(axis, rot);
-          } else if(e.key == 't') {
-            const axis = new THREE.Vector3(1, 0, 0);
-
-            expMesh.rotateOnWorldAxis(axis, -rot);
-          } else if(e.key == 'y') {
-            const axis = new THREE.Vector3(0, 1, 0);
-
-            expMesh.rotateOnWorldAxis(axis, rot);
-          } else if(e.key == 'u') {
-            const axis = new THREE.Vector3(0, 1, 0);
-
-            expMesh.rotateOnWorldAxis(axis, -rot);
-          } else if(e.key == 'i') {
-            const axis = new THREE.Vector3(0, 0, 1);
-
-            expMesh.rotateOnWorldAxis(axis, rot);
-          } else if(e.key == 'o') {
-            const axis = new THREE.Vector3(0, 0, 1);
-
-            expMesh.rotateOnWorldAxis(axis, -rot);
+          } else if (e.key == 'r') {
+            expMesh.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), rot);
+          } else if (e.key == 't') {
+            expMesh.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), -rot);
+          } else if (e.key == 'y') {
+            expMesh.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), rot);
+          } else if (e.key == 'u') {
+            expMesh.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), -rot);
+          } else if (e.key == 'i') {
+            expMesh.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), rot);
+          } else if (e.key == 'o') {
+            expMesh.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), -rot);
+          } else if (e.key == ' ') {
+            console.log(JSON.stringify(expMesh.position.toArray()));
           }
-        }
+        };
       }
 
       function loop() {
@@ -1754,66 +2022,76 @@
       }
       loop()
 
-      function extrude(i, h) {
-        // Literally no safeguard. What you make is what it tries to extrude
+      function canvasPoint(p) {
+        return {
+          x: (p.x - canvas.width / 2) * 1,
+          y: (p.y - canvas.height / 2) * 1
+        };
+      }
+
+      function extrude(i) {
         try {
-          let item = sortPaths(i)
-          let items = item[0]
-          let shape = new THREE.Shape()
+          const items = sortPaths(i)[0];
+          const shape = new THREE.Shape();
+          const point = p => canvasPoint(p);
 
-          for(let i = 0; i < items.length; i++) {
-            let curr = items[i]
+          items.forEach((curr, index) => {
+            const [start, end, middle] = curr.cords.map(point);
 
-            if(curr.type == 'line') {
-              shape.moveTo(Math.floor(curr.cords[0].x), Math.floor(curr.cords[0].y));
-              shape.lineTo(Math.floor(curr.cords[1].x), Math.floor(curr.cords[1].y));
-              //shape.closePath();
-            } else if(curr.type == 'arc') {
-              const arc = arcDataFrom3Points(
-               curr.cords[0], // start
-               curr.cords[2], // arc point
-               curr.cords[1]  // end
-             );
+            if (index === 0) shape.moveTo(start.x, start.y);
+            else shape.lineTo(start.x, start.y);
 
-             if (!arc) throw new Error("Bad arc");
-
-             shape.moveTo(curr.cords[0].x, curr.cords[0].y);
-
-             shape.absarc(
-               arc.cx,
-               arc.cy,
-               arc.radius,
-               arc.startAngle,
-               arc.endAngle,
-               arc.clockwise
-             );
+            if (curr.type === "line") {
+              shape.lineTo(end.x, end.y);
             }
-          }
 
-          const geometry = new THREE.ExtrudeGeometry( shape, { depth: 1, bevelEnabled: false } );
-          const material = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: false } );
-          const mesh = new THREE.Mesh( geometry, material ) ;
-          mesh.rotation.x = Math.PI / 2
-          mesh.name = 'draw' + Math.floor(Math.random() * 1000)
-          //modelGroup.add( mesh );
+            if (curr.type === "arc") {
+              const arc = arcDataFrom3Points(start, middle, end);
+              if (!arc) throw new Error("Bad arc");
 
-          const edges = new THREE.EdgesGeometry(geometry);
-          const line = new THREE.LineSegments(
-            edges,
+              shape.absarc(
+                arc.cx,
+                arc.cy,
+                arc.radius,
+                arc.startAngle,
+                arc.endAngle,
+                arc.clockwise
+              );
+            }
+          });
+
+          shape.closePath();
+
+          const geometry = new THREE.ExtrudeGeometry(shape, {
+            depth: -10,
+            bevelEnabled: false
+          });
+
+          const material = new THREE.MeshBasicMaterial({
+            color: 0x00ff00
+          });
+
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.rotation.x = Math.PI / 2;
+          mesh.name = `draw${Math.floor(Math.random() * 1000)}`;
+
+          const lines = new THREE.LineSegments(
+            new THREE.EdgesGeometry(geometry),
             new THREE.LineBasicMaterial({ color: 0x000000 })
           );
 
-          mesh.add(line);
+          mesh.add(lines);
 
           return {
             success: true,
-            mesh: mesh,
-            geometry: geometry,
-            material: material,
-            lines: line
-          }
-        } catch(err) {
-          alert(err)
+            mesh,
+            geometry,
+            material,
+            lines
+          };
+        } catch (err) {
+          alert(err);
+          return { success: false, error: err };
         }
       }
 
@@ -2177,6 +2455,19 @@
 
         return groups;
       }
+      window.addEventListener('resize', () => {
+        // 1. Update dimensions
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        // 2. Update camera aspect ratio
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+
+        // 3. Update renderer and canvas size
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      });
     </script>
   </body>
 </html>
