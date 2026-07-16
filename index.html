@@ -38,10 +38,14 @@
     }
     #drawCanvas {
       position: fixed;
-      top: 0;
-      left: 0;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
       z-index: 99;
       touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
     #placeSettings {
       display: none
@@ -112,7 +116,7 @@
        top: 52px;
        left: 0;
        width: 100vw;
-       height: calc(100vh - 52px);
+       height: calc(100dvh - 52px);
        box-sizing: border-box;
        resize: none;
      }
@@ -229,6 +233,18 @@
           <button onclick="newDrawing()">New Drawing</button>
           <button onclick="place()">Place</button>
           <button onclick="splitMode()" id="split-mode">Split Mode</button>
+
+          <details style="position: fixed; top: 0; right: 0; background-color: white; padding: 8px; margin-top: 8px; width: 200px; border: 2px solid #000000">
+            <summary>Ordering</summary>
+            <div style="height: 100%; overflow-y: scroll; background-color: white; width: 200px">
+              <ul id="place-order">
+                <li draggable="true">Item 1</li>
+                <li draggable="true">Item 2</li>
+                <li draggable="true">Item 3</li>
+                <li draggable="true">Item 4</li>
+              </ul>
+            </div>
+          </details>
           <p id="message"></p>
         </div>
         <div id="final">
@@ -1081,7 +1097,56 @@
       let selectedObj
       let split = false
       let finalMesh = new THREE.Group()
+      let list = document.getElementById("place-order");
+
       scene.add(finalMesh)
+
+      function loadOrder() {
+        // Load / Refresh the ordering tab
+        list.innerHTML = ''
+
+        for(let i = 0; i < modelGroup.children.length; i++) {
+          let c = document.createElement('li')
+          let col = {"add": "#00FF00", "subtract": "#FF0000"}
+          c.setAttribute('draggable', 'true')
+          c.textContent = modelGroup.children[i].name
+          c.style = "margin-top: 5px; padding: 3px; border: 2px solid " + col[modelGroup.children[i].userData.type]
+          c.id = modelGroup.children[i].name
+
+          list.appendChild(c)
+        }
+      }
+
+      let dragging = null;
+
+      list.addEventListener("dragstart", e => {
+        dragging = e.target;
+      });
+
+      list.addEventListener("dragover", e => {
+        e.preventDefault();
+
+        const after = [...list.querySelectorAll("li:not(.dragging)")]
+          .find(li => {
+            const rect = li.getBoundingClientRect();
+            return e.clientY < rect.top + rect.height / 2;
+          });
+
+        if (after) {
+          list.insertBefore(dragging, after);
+        } else {
+          list.appendChild(dragging);
+        }
+      });
+
+      list.addEventListener("dragend", () => {
+          dragging = null;
+
+          modelGroup.children = [...list.children].map(li =>
+              modelGroup.children.find(f => f.name == li.id)
+          );
+          createFull()
+      });
 
       function splitMode() {
         if(split) {
@@ -1220,9 +1285,11 @@
         return deg * (Math.PI / 180)
       }
 
-      c.addEventListener('mousedown', function(event) {
-        pointer.x = (event.clientX / c.clientWidth) * 2 - 1;
-        pointer.y = -(event.clientY / c.clientHeight) * 2 + 1;
+      c.addEventListener('pointerdown', function(event) {
+        const rect = c.getBoundingClientRect();
+
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
         raycaster.setFromCamera(pointer, camera);
 
@@ -1232,7 +1299,7 @@
           if(intersects.length != 0) {
             if(intersects[0].object.type == "LineSegments") {
               initExWin(intersects[0].object.parent)
-            } else if(intersects[0].name[0] == "d") {
+            } else {
               initExWin(intersects[0].object)
             }
           }
@@ -1487,7 +1554,7 @@
         let grabbed = false
         let grabOff = [0, 0]
 
-        wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 50; left: 50; border: 2px solid #000000; z-index: 999999`
+        wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 50px; left: 50px; border: 2px solid #000000; z-index: 999999`
         grab.style = `background-color: gray; height: 20px; width: ${options.width - 20}px; touch-action: none`
         close.style = 'background-color: white; width: 20px; height: 20px; margin-right: -20px; float: right; cursor: pointer; text-align: center'
         content.style = `height: ${options.height - 20}px; width: ${options.width}px;`
@@ -1636,7 +1703,6 @@
           return;
         }
 
-        // Start with a clone so the original stays inside modelGroup
         let result = modelGroup.children[0].clone();
         result.geometry = modelGroup.children[0].geometry.clone();
 
@@ -1699,6 +1765,7 @@
             }
             curr.material.color = new THREE.Color(0xFF0000)
           }
+          loadOrder()
           createFull()
         })
         remove.dispatchEvent(new Event("change"));
@@ -1781,6 +1848,7 @@
       function ex() {
         let height = 10
         let ext = extrude(points)
+
         if(ext.success) {
           // Set camera to PerspectiveCamera
           cameraPersp.position.copy(cameraOrtho.position);
@@ -1795,33 +1863,12 @@
           document.getElementById('placeSettings').style.display = 'inline-block'
           canvas.style.display = 'none'
           ext.geometry.computeBoundingBox();
-
-          // const center = new THREE.Vector3();
-          // ext.geometry.boundingBox.getCenter(center);
-          //
-          // const offset = findOffset(center)
-          //
-          // ext.geometry.translate(
-          //   -center.x,
-          //   -center.y,
-          //   -center.z
-          // );
-          // ext.lines.geometry.translate(
-          //   -center.x,
-          //   -center.y,
-          //   -center.z
-          // );
-          // ext.mesh.position.set(
-          //   offset.x * 0.1,
-          //   offset.z * 0.1,
-          //   offset.y * 0.1
-          // );
           ext.mesh.scale.set(1, 1, height)
 
           expMesh = ext.mesh
           createdMesh = ext.mesh
           selectedObj = ext.mesh
-
+          loadOrder()
         } else {
           alert(JSON.stringify(ext.errors))
         }
@@ -2053,9 +2100,11 @@
       loop()
 
       function canvasPoint(p) {
+        const rect = canvas.getBoundingClientRect();
+
         return {
-          x: (p.x - canvas.width / 2) * 1,
-          y: (p.y - canvas.height / 2) * 1
+          x: p.x - rect.width / 2,
+          y: p.y - rect.height / 2
         };
       }
 
@@ -2093,7 +2142,7 @@
           shape.closePath();
 
           const geometry = new THREE.ExtrudeGeometry(shape, {
-            depth: -10,
+            depth: 10,
             bevelEnabled: false
           });
 
@@ -2104,6 +2153,7 @@
           const mesh = new THREE.Mesh(geometry, material);
           mesh.rotation.x = Math.PI / 2;
           mesh.name = `draw${Math.floor(Math.random() * 1000)}`;
+          mesh.position.y = 100
 
           const lines = new THREE.LineSegments(
             new THREE.EdgesGeometry(geometry),
@@ -2171,7 +2221,9 @@
           e.preventDefault();
 
           activePointerId = e.pointerId;
-          canvas.setPointerCapture(e.pointerId);
+          try {
+            canvas.setPointerCapture(e.pointerId);
+          } catch(err) {}
 
           const p = snapPoint(getCanvasPoint(e));
 
@@ -2188,7 +2240,7 @@
                       finished: false,
                       cords: [{ x: p.x, y: p.y }]
                   });
-              } else if (phase === 0 && !pencil) {
+              } else if (phase === 0) {
                   phase = -1;
                   points[points.length - 1].cords.push({ x: p.x, y: p.y });
                   points[points.length - 1].finished = true;
@@ -2292,13 +2344,29 @@
       canvas.addEventListener('pointerup', pointerUp);
       canvas.addEventListener('pointercancel', pointerUp);
 
-      function snapPoint(p) {
-        if (latchHelper.x !== -5) {
-          p.x = latchHelper.x;
-          p.y = latchHelper.y;
+      function snapPoint(p, snapDistance = 16) {
+        let closest = null;
+        let closestDistance = snapDistance;
+
+        for (const item of points) {
+          if (!item.finished) continue;
+
+          for (const endpoint of [item.cords[0], item.cords[1]]) {
+            const distance = Math.hypot(
+              p.x - endpoint.x,
+              p.y - endpoint.y
+            );
+
+            if (distance < closestDistance) {
+              closest = endpoint;
+              closestDistance = distance;
+            }
+          }
         }
 
-        return p;
+        return closest
+          ? { x: closest.x, y: closest.y }
+          : { x: p.x, y: p.y };
       }
 
       function draw3PointArc(p1, p2, p3) {
@@ -2582,6 +2650,10 @@
         cameraOrtho.updateProjectionMatrix();
       }
       resizeThreeCanvas()
+
+      window.setInterval(function() {
+        resizeRenderer()
+      }, 10 * 1000)
     </script>
   </body>
 </html>
