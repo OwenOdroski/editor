@@ -127,7 +127,7 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
-      <p>APP VERSION: 1.1.8</p>
+      <p>APP VERSION: 1.1.9</p>
       <input type="file" accept=".json" id="newFile"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <br><br>
@@ -1180,6 +1180,9 @@
         cameraOrtho.quaternion.copy(cameraPersp.quaternion);
 
         camera = cameraOrtho
+        controls.object = cameraOrtho;
+
+        cameraOrtho.updateProjectionMatrix();
         scene.scale.set(1, 1, 1)
         camera.lookAt(0, 0, 0)
 
@@ -1784,6 +1787,9 @@
           cameraPersp.quaternion.copy(cameraOrtho.quaternion);
 
           camera = cameraPersp
+          controls.object = cameraPersp;
+
+          cameraPersp.updateProjectionMatrix();
           scene.scale.set(0.0172, 0.0172, 0.0172)
           document.getElementById('drawSettings').style.display = 'none'
           document.getElementById('placeSettings').style.display = 'inline-block'
@@ -2497,6 +2503,7 @@
         return groups;
       }
       function resizeRenderer() {
+        resizeThreeCanvas()
         const viewport = window.visualViewport;
 
         const width = Math.round(viewport?.width || window.innerWidth);
@@ -2552,6 +2559,29 @@
       }
 
       resizeRenderer();
+
+      function resizeThreeCanvas() {
+        const rect = c.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+
+        if (!width || !height) return;
+
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(width, height, false);
+
+        cameraPersp.aspect = width / height;
+        cameraPersp.updateProjectionMatrix();
+
+        const orthoHeight = height;
+
+        cameraOrtho.left = -(orthoHeight * (width / height)) / 2;
+        cameraOrtho.right = (orthoHeight * (width / height)) / 2;
+        cameraOrtho.top = orthoHeight / 2;
+        cameraOrtho.bottom = -orthoHeight / 2;
+        cameraOrtho.updateProjectionMatrix();
+      }
+      resizeThreeCanvas()
     </script>
   </body>
 </html>
