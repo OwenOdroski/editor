@@ -228,6 +228,10 @@
           <button onclick="cancel()">Cancel</button>
           <button onclick="undo()">Undo</button>
           <button onclick="redo()">Redo</button>
+          <label>
+            Apple Pencil Only
+            <input type="checkbox" id="pen">
+          </label>
         </div>
         <div id="placeSettings">
           <div class="spacer"></div>
@@ -2028,6 +2032,7 @@
         db.components.push(json)
         saveJSON(indexed, 'editDB', db)
         relatedParts = []
+        window.location.reload()
       }
       function place() {
         placeSettings = true
@@ -2038,14 +2043,30 @@
         grid.visible = false;
         comp.visible = true;
 
+        // Center mesh
+        finalMesh.children[0].geometry.computeBoundingBox();
+
+        const center = new THREE.Vector3();
+        finalMesh.children[0].geometry.boundingBox.getCenter(center);
+
+        finalMesh.children[0].geometry.translate(
+            -center.x,
+            -center.y,
+            -center.z
+        );
+        finalMesh.position.set(0, 0, 0)
+        finalMesh.children[0].position.set(0, 0, 0)
+
+        while (finalMesh.children[0].children.length > 0) {
+          finalMesh.children[0].remove(finalMesh.children[0].children[0]);
+        }
+
         scene.scale.set(1, 1, 1);
 
-        // Keep the parent at scale 1 so child movement remains 1:1.
         finalMesh.scale.set(1, 1, 1);
 
         comp.add(finalMesh);
 
-        // Use the actual visible boolean-result mesh.
         expMesh = finalMesh.children[0];
 
         // Scale the mesh itself. An object's own scale does not shrink its position.
@@ -2221,8 +2242,18 @@
               y: e.clientY - rect.top
           };
       }
+      function inputIsAllowed(event) {
+        if (!document.getElementById('pen').checked) {
+          return true;
+        }
+
+        return event.pointerType === "pen";
+      }
 
       function pointerMove(e) {
+        if (!inputIsAllowed(e)) return;
+
+
           const mouse = getCanvasPoint(e);
           let found = false;
 
@@ -2255,8 +2286,11 @@
           update();
       }
 
+
+
       function pointerDown(e) {
           e.preventDefault();
+          if (!inputIsAllowed(e)) return;
 
           activePointerId = e.pointerId;
           try {
@@ -2309,6 +2343,7 @@
       }
       function pointerUp(e) {
         if (activePointerId !== e.pointerId) return;
+        if (!inputIsAllowed(e)) return;
 
         e.preventDefault();
 
