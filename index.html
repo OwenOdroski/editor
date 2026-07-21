@@ -242,6 +242,10 @@
             Apple Pencil Only
             <input type="checkbox" id="pen">
           </label>
+          <select id="customShape">
+            <option>-- Shape --</option>
+            <option>Sphere</option>
+          </select>
         </div>
         <div id="placeSettings">
           <div class="spacer"></div>
@@ -1081,6 +1085,9 @@
       WUCFill.addEventListener('input', () => {
 
         const code = WUCFill.value.trim().toUpperCase();
+        function format(text) {
+          return text.slice(0, 5)
+        }
 
         if(code.length !== 5) {
           WUCOut.textContent = '';
@@ -1088,7 +1095,7 @@
         }
 
         const found = WUC.find(
-          w => w.code.toUpperCase() === code
+          w => format(w.code).toUpperCase() === code
         );
 
         if(found) {
@@ -1241,6 +1248,41 @@
           finalMesh.visible = false
         }
       }
+      let cShape = document.getElementById('customShape')
+      function customShape() {
+        let shape
+
+        if(cShape.selectedIndex == 1) { // Sphere
+          let sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(30, 30, 30),
+            new THREE.MeshBasicMaterial({color: 0x00FF00})
+          )
+          sphere.name = `draw${Math.floor(Math.random() * 10000)}`
+          expMesh = sphere
+          createdMesh = sphere
+          selectedObj = sphere
+          initExWin()
+          shape = sphere
+        }
+
+        // Init 3D view and hide 2D view
+        cameraPersp.position.copy(cameraOrtho.position);
+        cameraPersp.quaternion.copy(cameraOrtho.quaternion);
+
+        camera = cameraPersp
+        controls.object = cameraPersp;
+
+        cameraPersp.updateProjectionMatrix();
+        scene.scale.set(0.0172, 0.0172, 0.0172)
+        document.getElementById('drawSettings').style.display = 'none'
+        document.getElementById('placeSettings').style.display = 'inline-block'
+        canvas.style.display = 'none'
+
+        loadOrder()
+        cShape.selectedIndex = 0
+      }
+      cShape.addEventListener('change', customShape)
+
       function addRelated() {
         let win = newDragBox({width: 400, height: 500})
         let parent = win.win
@@ -2508,7 +2550,7 @@
 
           const mesh = new THREE.Mesh(geometry, material);
           mesh.rotation.x = Math.PI / 2;
-          mesh.name = `draw${Math.floor(Math.random() * 1000)}`;
+          mesh.name = `draw${Math.floor(Math.random() * 10000)}`;
           mesh.position.y = 100
 
           const lines = new THREE.LineSegments(
