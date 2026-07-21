@@ -16,6 +16,16 @@
       top: 0;
       left: 0
     }
+    #ext-panel {
+      position: fixed;
+      top: 0px;
+      left: 0px;
+    }
+    #int-panel {
+      position: fixed;
+      top: 0px;
+      left: 0px;
+    }
     #top {
       position: fixed;
       top: 0;
@@ -295,6 +305,19 @@
       <canvas id="drawCanvas"></canvas>
       <canvas id="canvas"></canvas>
     </div>
+    <br>
+    <details>
+      <summary>Export .ENC</summary>
+      <p>Full Name: <input type="text" placeholder="Name" id="name"></p>
+      <p>Unit: <input type="text" id="base" placeholder="e.g. 122d AMXS"></p>
+      <p>Employee Number: <input type="number" id="num" placeholder="Number"></p>
+      <p>ELS Date: <input type="date" placeholder="date" id="els"></p>
+      <p>Username: <input type="text" placeholder="Username" id="username"></p>
+      <p>Encryption Key: <input type="text" placeholder="Key" id="key"></p>
+      <p id="error" style="background-color: red; padding: 3px; color: white; display: none"></p>
+      <input type="text" id="output">
+      <button onclick="finish()">Generate</button>
+    </details>
 
     <script src="./three.js"></script>
     <script src="./Orbit.js"></script>
@@ -461,6 +484,9 @@
           db = await getJSON(a, 'editDB')
           updateTop()
           loadEditor()
+
+          // ANY DB FORMATTING CHANGES GO HERE
+
         }
       }
 
@@ -694,8 +720,10 @@
         let pointer = new THREE.Vector2()
 
         c2.onpointerdown = function(event) {
-          pointer.x = (event.clientX / c2.clientWidth) * 2 - 1;
-          pointer.y = -(event.clientY / c2.clientHeight) * 2 + 1;
+          const rect = c2.getBoundingClientRect();
+
+          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
           raycaster.setFromCamera(pointer, camera2);
 
@@ -816,8 +844,10 @@
         let pointer = new THREE.Vector2()
 
         c3.onclick = function(event) {
-          pointer.x = (event.clientX / c3.clientWidth) * 2 - 1;
-          pointer.y = -(event.clientY / c3.clientHeight) * 2 + 1;
+          const rect = c3.getBoundingClientRect();
+
+          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
           raycaster.setFromCamera(pointer, camera3);
 
@@ -836,6 +866,7 @@
               let win = wind.win
               let number = document.createElement('input')
               let ref = document.createElement('input')
+              let fastener = document.createElement('input')
               let type = document.createElement('select')
               let desc = document.createElement('textarea')
               let save = document.createElement('button')
@@ -857,8 +888,9 @@
 
               if(index != undefined) {
                 number.value = db.panels[index].number ? db.panels[index].number : ""
-                ref.value = db.panels[index].ref ? db.panels[index].ref : ""
-                desc.value = db.panels[index].desc ? db.panels[index].desc : ""
+                ref.value = db.panels[index].ref != "undefined" ? db.panels[index].ref : ""
+                desc.value = db.panels[index].desc != "undefined" ? db.panels[index].desc : ""
+                fastener.value = db.panels[index].fast != "undefined" ? db.panels[index].fast : ""
 
                 type.selectedIndex = ["PANEL", "DOOR", "QUICK ACCESS DOOR", "STRESS PANEL"].indexOf(db.panels[index].type.toUpperCase())
               }
@@ -882,6 +914,7 @@
                   db.panels[index].ref = ref.value
                   db.panels[index].desc = desc.value
                   db.panels[index].type = type.value
+                  db.panels[index].fast = fastener.value
                 } else {
                   db.panels.push({
                     number: number.value,
@@ -909,6 +942,11 @@
               win.appendChild(label('TO Reference'))
               win.appendChild(ref)
 
+              win.appendChild(label('Fastener P/N'))
+              win.appendChild(fastener)
+
+              win.appendChild(label('Type'))
+              type.style.width = "calc(100% - 8px)"
               win.appendChild(type)
 
               win.appendChild(label('Description'))
@@ -1368,14 +1406,37 @@
 
       function openFinalPositioning(mesh, onUpdate = null) {
         if (!mesh || !mesh.isObject3D) {
-          throw new Error("openFinalPositioning requires a THREE.Object3D or mesh.");
+          throw new Error(
+            "openFinalPositioning requires a THREE.Object3D or mesh."
+          );
         }
 
         const win = newDragBox().win;
         const tabs = createTabs(["POS", "SCALE", "ROT"], win);
         const inputs = {};
 
+        let isDestroyed = false;
+        let isUpdatingFromInputs = false;
+        let animationFrameId = null;
+
+        /*
+         * Values used by Reset Scale.
+         *
+         * These are captured when the window opens. The displayed scale values,
+         * however, are always the mesh's actual current scale.
+         */
         const initialScale = mesh.scale.clone();
+
+        /*
+         * Last values displayed in the controls.
+         *
+         * These prevent unnecessary DOM updates every animation frame.
+         */
+        const displayedTransform = {
+          position: mesh.position.clone(),
+          rotation: mesh.rotation.clone(),
+          scale: mesh.scale.clone()
+        };
 
         function runUpdateCallback() {
           if (typeof onUpdate === "function") {
@@ -1383,52 +1444,88 @@
           }
         }
 
+        function parseInput(input, fallback = 0) {
+          const value = parseFloat(input.value);
+          return Number.isFinite(value) ? value : fallback;
+        }
+
+        function formatNumber(value) {
+          /*
+           * Removes unnecessary floating-point noise while still allowing decimals.
+           *
+           * Example:
+           * 1.5000000002 becomes "1.5"
+           */
+          return String(Number(value.toFixed(6)));
+        }
+
+        function inputIsBeingEdited(input) {
+          return document.activeElement === input;
+        }
+
         function updatePosition() {
+          isUpdatingFromInputs = true;
+
           mesh.position.set(
-            Number(inputs.posX.value) || 0,
-            Number(inputs.posY.value) || 0,
-            Number(inputs.posZ.value) || 0
+            parseInput(inputs.posX, mesh.position.x),
+            parseInput(inputs.posY, mesh.position.y),
+            parseInput(inputs.posZ, mesh.position.z)
           );
 
+          displayedTransform.position.copy(mesh.position);
+
+          mesh.updateMatrix();
+          mesh.updateMatrixWorld(true);
+
+          isUpdatingFromInputs = false;
           runUpdateCallback();
         }
 
         function updateRotation() {
+          isUpdatingFromInputs = true;
+
           mesh.rotation.set(
-            degToRad(Number(inputs.rotX.value) || 0),
-            degToRad(Number(inputs.rotY.value) || 0),
-            degToRad(Number(inputs.rotZ.value) || 0)
+            degToRad(parseInput(inputs.rotX, radToDeg(mesh.rotation.x))),
+            degToRad(parseInput(inputs.rotY, radToDeg(mesh.rotation.y))),
+            degToRad(parseInput(inputs.rotZ, radToDeg(mesh.rotation.z)))
           );
 
+          displayedTransform.rotation.copy(mesh.rotation);
+
+          mesh.updateMatrix();
+          mesh.updateMatrixWorld(true);
+
+          isUpdatingFromInputs = false;
           runUpdateCallback();
         }
 
         function updateScale(changedAxis) {
-          const uniform = inputs.uniformScale.checked;
+          isUpdatingFromInputs = true;
 
-          if (uniform) {
-            /*
-             * Copy the changed scale multiplier into all three inputs.
-             */
-            const value = Number(inputs[`scale${changedAxis}`].value);
-
-            const multiplier = Number.isFinite(value) ? value : 1;
-
-            inputs.scaleX.value = multiplier;
-            inputs.scaleY.value = multiplier;
-            inputs.scaleZ.value = multiplier;
-          }
-
-          const scaleX = Number(inputs.scaleX.value);
-          const scaleY = Number(inputs.scaleY.value);
-          const scaleZ = Number(inputs.scaleZ.value);
-
-          mesh.scale.set(
-            initialScale.x * (Number.isFinite(scaleX) ? scaleX : 1),
-            initialScale.y * (Number.isFinite(scaleY) ? scaleY : 1),
-            initialScale.z * (Number.isFinite(scaleZ) ? scaleZ : 1)
+          const changedInput = inputs[`scale${changedAxis}`];
+          const changedValue = parseInput(
+            changedInput,
+            mesh.scale[changedAxis.toLowerCase()]
           );
 
+          if (inputs.uniformScale.checked) {
+            inputs.scaleX.value = formatNumber(changedValue);
+            inputs.scaleY.value = formatNumber(changedValue);
+            inputs.scaleZ.value = formatNumber(changedValue);
+          }
+
+          mesh.scale.set(
+            parseInput(inputs.scaleX, mesh.scale.x),
+            parseInput(inputs.scaleY, mesh.scale.y),
+            parseInput(inputs.scaleZ, mesh.scale.z)
+          );
+
+          displayedTransform.scale.copy(mesh.scale);
+
+          mesh.updateMatrix();
+          mesh.updateMatrixWorld(true);
+
+          isUpdatingFromInputs = false;
           runUpdateCallback();
         }
 
@@ -1441,20 +1538,26 @@
         }) {
           const label = document.createElement("label");
           const input = document.createElement("input");
-          const id = `${group}${axis}`;
+          const axisUpper = axis.toUpperCase();
+          const id = `${group}${axisUpper}-${mesh.uuid}`;
 
           label.htmlFor = id;
-          label.textContent = axis.toUpperCase();
+          label.textContent = axisUpper;
 
           input.type = "number";
           input.id = id;
           input.className = "winInput";
-          input.value = value;
+          input.value = formatNumber(value);
+
+          /*
+           * step="any" allows any decimal value.
+           */
           input.step = "any";
+          input.inputMode = "decimal";
 
           input.addEventListener("input", update);
 
-          inputs[`${group}${axis.toUpperCase()}`] = input;
+          inputs[`${group}${axisUpper}`] = input;
 
           tab.appendChild(label);
           tab.appendChild(input);
@@ -1482,7 +1585,7 @@
 
         uniformScale.type = "checkbox";
         uniformScale.checked = true;
-        uniformScale.id = "uniformScale";
+        uniformScale.id = `uniformScale-${mesh.uuid}`;
 
         uniformLabel.htmlFor = uniformScale.id;
         uniformLabel.textContent = "Uniform Scale";
@@ -1497,7 +1600,7 @@
         /*
          * Scale controls
          *
-         * Each starts at 1 because these are multipliers applied to initialScale.
+         * These now show the actual current scale rather than multipliers.
          */
         for (const axis of ["x", "y", "z"]) {
           const axisUpper = axis.toUpperCase();
@@ -1506,7 +1609,7 @@
             tab: tabs[1],
             group: "scale",
             axis,
-            value: 1,
+            value: mesh.scale[axis],
             update: () => updateScale(axisUpper)
           });
         }
@@ -1524,18 +1627,154 @@
           });
         }
 
+        function syncInputsWithMesh() {
+          if (isDestroyed) {
+            return;
+          }
+
+          /*
+           * Do not overwrite a value while this window is actively applying
+           * values entered by the user.
+           */
+          if (!isUpdatingFromInputs) {
+            /*
+             * Position changed externally.
+             */
+            if (!displayedTransform.position.equals(mesh.position)) {
+              if (!inputIsBeingEdited(inputs.posX)) {
+                inputs.posX.value = formatNumber(mesh.position.x);
+              }
+
+              if (!inputIsBeingEdited(inputs.posY)) {
+                inputs.posY.value = formatNumber(mesh.position.y);
+              }
+
+              if (!inputIsBeingEdited(inputs.posZ)) {
+                inputs.posZ.value = formatNumber(mesh.position.z);
+              }
+
+              displayedTransform.position.copy(mesh.position);
+            }
+
+            /*
+             * Scale changed externally.
+             */
+            if (!displayedTransform.scale.equals(mesh.scale)) {
+              if (!inputIsBeingEdited(inputs.scaleX)) {
+                inputs.scaleX.value = formatNumber(mesh.scale.x);
+              }
+
+              if (!inputIsBeingEdited(inputs.scaleY)) {
+                inputs.scaleY.value = formatNumber(mesh.scale.y);
+              }
+
+              if (!inputIsBeingEdited(inputs.scaleZ)) {
+                inputs.scaleZ.value = formatNumber(mesh.scale.z);
+              }
+
+              displayedTransform.scale.copy(mesh.scale);
+            }
+
+            /*
+             * Rotation changed externally.
+             *
+             * Euler.equals() is not available in every older Three.js version,
+             * so compare the values directly.
+             */
+            const rotationChanged =
+              displayedTransform.rotation.x !== mesh.rotation.x ||
+              displayedTransform.rotation.y !== mesh.rotation.y ||
+              displayedTransform.rotation.z !== mesh.rotation.z ||
+              displayedTransform.rotation.order !== mesh.rotation.order;
+
+            if (rotationChanged) {
+              if (!inputIsBeingEdited(inputs.rotX)) {
+                inputs.rotX.value = formatNumber(
+                  radToDeg(mesh.rotation.x)
+                );
+              }
+
+              if (!inputIsBeingEdited(inputs.rotY)) {
+                inputs.rotY.value = formatNumber(
+                  radToDeg(mesh.rotation.y)
+                );
+              }
+
+              if (!inputIsBeingEdited(inputs.rotZ)) {
+                inputs.rotZ.value = formatNumber(
+                  radToDeg(mesh.rotation.z)
+                );
+              }
+
+              displayedTransform.rotation.copy(mesh.rotation);
+            }
+          }
+
+          /*
+           * Stop automatically if the window has been removed from the page.
+           */
+          if (!win.isConnected) {
+            destroy();
+            return;
+          }
+
+          animationFrameId = requestAnimationFrame(syncInputsWithMesh);
+        }
+
+        function refresh() {
+          /*
+           * Public manual refresh method in case another function updates the mesh
+           * and you want to refresh the controls immediately.
+           */
+          displayedTransform.position.set(
+            Number.NaN,
+            Number.NaN,
+            Number.NaN
+          );
+
+          displayedTransform.scale.set(
+            Number.NaN,
+            Number.NaN,
+            Number.NaN
+          );
+
+          displayedTransform.rotation.set(
+            Number.NaN,
+            Number.NaN,
+            Number.NaN
+          );
+        }
+
+        function destroy() {
+          if (isDestroyed) {
+            return;
+          }
+
+          isDestroyed = true;
+
+          if (animationFrameId !== null) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+          }
+        }
+
         /*
-         * Optional reset button.
+         * Reset button
          */
         const resetButton = document.createElement("button");
         resetButton.textContent = "Reset Scale";
 
         resetButton.onclick = function () {
-          inputs.scaleX.value = 1;
-          inputs.scaleY.value = 1;
-          inputs.scaleZ.value = 1;
-
           mesh.scale.copy(initialScale);
+
+          inputs.scaleX.value = formatNumber(mesh.scale.x);
+          inputs.scaleY.value = formatNumber(mesh.scale.y);
+          inputs.scaleZ.value = formatNumber(mesh.scale.z);
+
+          displayedTransform.scale.copy(mesh.scale);
+
+          mesh.updateMatrix();
+          mesh.updateMatrixWorld(true);
 
           runUpdateCallback();
         };
@@ -1543,14 +1782,18 @@
         tabs[1].appendChild(resetButton);
 
         /*
-         * Return useful references in case the calling code needs them.
+         * Begin watching for changes made by outside functions.
          */
+        animationFrameId = requestAnimationFrame(syncInputsWithMesh);
+
         return {
           win,
           tabs,
           inputs,
           mesh,
-          initialScale
+          initialScale,
+          refresh,
+          destroy
         };
       }
 
@@ -1586,7 +1829,7 @@
         }
       }
 
-      function newDragBox(options = {width: 200, height: 400}) {
+      function newDragBox(options = {width: 200, height: 400, dontClose: false}) {
         // HTML element that is like a built in popup
         let wrap = document.createElement('div')
         let grab = document.createElement('div')
@@ -1600,6 +1843,11 @@
         close.style = 'background-color: white; width: 20px; height: 20px; margin-right: -20px; float: right; cursor: pointer; text-align: center'
         content.style = `height: ${options.height - 20}px; width: ${options.width}px;`
         close.textContent = 'x'
+
+        if(options.dontClose == true) {
+          close.style.display = 'none'
+          grab.width = options.width + "px"
+        }
 
         close.onclick = function() {
           wrap.style.display = 'none'
@@ -1921,7 +2169,7 @@
       function exportJSON() {
         inExport = true;
 
-        expMesh.updateMatrixWorld(true);
+        scene.updateMatrixWorld(true);
 
         const pos = new THREE.Vector3();
         const quat = new THREE.Quaternion();
@@ -2043,19 +2291,51 @@
         grid.visible = false;
         comp.visible = true;
 
-        // Center mesh
+        // Scale the mesh itself. An object's own scale does not shrink its position.
+        finalMesh.children[0].scale.multiplyScalar(0.01);
+
+        // Apply the scale to the geometry and reset to 1
+        const scaleMatrix = new THREE.Matrix4().makeScale(
+          finalMesh.children[0].scale.x,
+          finalMesh.children[0].scale.y,
+          finalMesh.children[0].scale.z
+        );
+
+        finalMesh.children[0].geometry.applyMatrix4(scaleMatrix);
+        finalMesh.children[0].scale.set(1, 1, 1);
+
+        // Refresh derived geometry data.
         finalMesh.children[0].geometry.computeBoundingBox();
+        finalMesh.children[0].geometry.computeBoundingSphere();
+        finalMesh.children[0].geometry.computeVertexNormals();
+
+        finalMesh.children[0].updateMatrix();
+        finalMesh.children[0].updateMatrixWorld(true);
+
+        // Center mesh
+        const mesh = finalMesh.children[0];
+
+        mesh.geometry.computeBoundingBox();
 
         const center = new THREE.Vector3();
-        finalMesh.children[0].geometry.boundingBox.getCenter(center);
+        mesh.geometry.boundingBox.getCenter(center);
 
-        finalMesh.children[0].geometry.translate(
-            -center.x,
-            -center.y,
-            -center.z
+        mesh.geometry.translate(
+          -center.x,
+          -center.y,
+          -center.z
         );
-        finalMesh.position.set(0, 0, 0)
-        finalMesh.children[0].position.set(0, 0, 0)
+
+        mesh.position.set(0, 0, 0);
+        mesh.rotation.set(0, 0, 0);
+        mesh.scale.set(1, 1, 1);
+
+        mesh.geometry.computeBoundingBox();
+        mesh.geometry.computeBoundingSphere();
+        mesh.geometry.computeVertexNormals();
+
+        mesh.updateMatrix();
+        mesh.updateMatrixWorld(true);
 
         while (finalMesh.children[0].children.length > 0) {
           finalMesh.children[0].remove(finalMesh.children[0].children[0]);
@@ -2065,12 +2345,29 @@
 
         finalMesh.scale.set(1, 1, 1);
 
-        comp.add(finalMesh);
-
         expMesh = finalMesh.children[0];
 
-        // Scale the mesh itself. An object's own scale does not shrink its position.
-        expMesh.scale.multiplyScalar(0.01);
+        scene.updateMatrixWorld(true);
+
+        const worldMatrix = expMesh.matrixWorld.clone();
+
+        finalMesh.remove(expMesh);
+        comp.add(expMesh);
+
+        comp.updateMatrixWorld(true);
+
+        const inverseParent = new THREE.Matrix4().getInverse(comp.matrixWorld);
+
+        const localMatrix = inverseParent.multiply(worldMatrix);
+
+        localMatrix.decompose(
+          expMesh.position,
+          expMesh.quaternion,
+          expMesh.scale
+        );
+
+        expMesh.updateMatrix();
+        expMesh.updateMatrixWorld(true);
 
         let ref = [
           undefined,
@@ -2727,6 +3024,103 @@
       window.setInterval(function() {
         resizeRenderer()
       }, 10 * 1000)
+
+      // Creating data file
+
+      function finish() {
+        let name = document.getElementById('name')
+        let els = document.getElementById('els')
+        let key = document.getElementById('key')
+        let base = document.getElementById('base')
+        let empNum = document.getElementById('num')
+        let username = document.getElementById('username')
+
+        let b = {
+          name: name.value,
+          els: els.value,
+          key: key.value,
+          unit: base.value,
+          empNum: empNum.value,
+          username: username.value
+        }
+        let l = new TextEncoder().encode(b.username + b.key).length
+        if(l < 16) {
+          document.getElementById('error').style.display = 'block'
+          document.getElementById('error').textContent = 'Must have at least 16 bytes for username + password. Current length: ' + l
+          return
+        }
+
+        document.getElementById('output').value = JSON.stringify(b)
+
+        let obj = db
+        obj.meta = {
+          name: name.value,
+          els: els.value,
+          unit: base.value,
+          empNum: empNum.value,
+        }
+
+        encryptAES(obj, username.value + key.value).then((data) => {
+          const blob = new Blob([data], { type: "application/octet-stream" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = 'reference.enc';
+          a.click();
+
+          URL.revokeObjectURL(url);
+        })
+      }
+      async function encryptAES(data, password) {
+        const enc = new TextEncoder();
+
+        const plaintext = typeof data === "string" ? data : JSON.stringify(data);
+
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+
+        const keyMaterial = await crypto.subtle.importKey(
+          "raw",
+          enc.encode(password),
+          "PBKDF2",
+          false,
+          ["deriveKey"]
+        );
+
+        const key = await crypto.subtle.deriveKey(
+          { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+          keyMaterial,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt"]
+        );
+
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+
+        const encryptedBuf = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv },
+          key,
+          enc.encode(plaintext)
+        );
+
+        const encryptedBytes = new Uint8Array(encryptedBuf);
+
+        // salt (16) + iv (12) + ciphertext
+        const combined = new Uint8Array(16 + 12 + encryptedBytes.length);
+        combined.set(salt, 0);
+        combined.set(iv, 16);
+        combined.set(encryptedBytes, 28);
+
+        return bytesToBase64(combined);
+      }
+      function bytesToBase64(bytes) {
+        let binary = "";
+        const chunkSize = 0x8000; // 32KB chunks
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          const chunk = bytes.subarray(i, i + chunkSize);
+          binary += String.fromCharCode.apply(null, chunk);
+        }
+        return btoa(binary);
+      }
     </script>
   </body>
 </html>
