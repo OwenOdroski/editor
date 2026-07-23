@@ -245,6 +245,8 @@
           <select id="customShape">
             <option>-- Shape --</option>
             <option>Sphere</option>
+            <option>Box</option>
+            <option>Cylinder</option>
           </select>
         </div>
         <div id="placeSettings">
@@ -267,7 +269,7 @@
           <div class="spacer"></div>
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
           <button onclick="document.getElementById('settings').style.display='block'">Settings</button>
-          <button onclick="document.getElementById('export').style.display='block'">Export</button>
+          <button onclick="document.getElementById('export').style.display='block';inExport=true">Export</button>
           <select id="preset-loc">
             <option>-- None Selected --</option>
             <option>Left MLG</option>
@@ -287,7 +289,7 @@
         </div>
       </div>
       <div class="popup" id="export">
-        <button onclick="document.getElementById('export').style.display='none'">Close</button>
+        <button onclick="document.getElementById('export').style.display='none'; inExport=false">Close</button>
         <h2>Export</h2>
         <p>System: <select id="system"></select></p>
         <p>TO Reference: <input type="text" id="to" placeholder="TO Reference"></p>
@@ -323,13 +325,13 @@
       <button onclick="finish()">Generate</button>
     </details>
 
-    <script src="./three.js"></script>
-    <script src="./Orbit.js"></script>
-    <script src="./Loader.js"></script>
-    <script src="./csg-lib.js"></script>
-    <script src="./csg-worker.js"></script>
-    <script src="./three-csg.js"></script>
-    <script>
+    <script src="./three.js" defer></script>
+    <script src="./Orbit.js" defer></script>
+    <script src="./Loader.js"defer></script>
+    <script src="./csg-lib.js" defer></script>
+    <script src="./csg-worker.js" defer></script>
+    <script src="./three-csg.js" defer></script>
+    <script defer>
 
       // DB Handling
       const DB_NAME = "index"
@@ -1252,9 +1254,33 @@
       function customShape() {
         let shape
 
+        if(cShape.selectedIndex == 0) return
+
         if(cShape.selectedIndex == 1) { // Sphere
           let sphere = new THREE.Mesh(
             new THREE.SphereGeometry(30, 30, 30),
+            new THREE.MeshBasicMaterial({color: 0x00FF00})
+          )
+          sphere.name = `draw${Math.floor(Math.random() * 10000)}`
+          expMesh = sphere
+          createdMesh = sphere
+          selectedObj = sphere
+          initExWin()
+          shape = sphere
+        } else if(cShape.selectedIndex == 2) { // Box
+          let sphere = new THREE.Mesh(
+            new THREE.BoxGeometry(30, 30, 30),
+            new THREE.MeshBasicMaterial({color: 0x00FF00})
+          )
+          sphere.name = `draw${Math.floor(Math.random() * 10000)}`
+          expMesh = sphere
+          createdMesh = sphere
+          selectedObj = sphere
+          initExWin()
+          shape = sphere
+        } else if(cShape.selectedIndex == 3) { // Cylinder
+          let sphere = new THREE.Mesh(
+            new THREE.CylinderGeometry(30, 30, 40, 50),
             new THREE.MeshBasicMaterial({color: 0x00FF00})
           )
           sphere.name = `draw${Math.floor(Math.random() * 10000)}`
@@ -1870,8 +1896,12 @@
           z: 0
         }
       }
-
+      let allWindows = []
       function newDragBox(options = {width: 200, height: 400, dontClose: false}) {
+        // Close all other windows
+        for(let i in allWindows) {
+          allWindows[i].remove()
+        }
         // HTML element that is like a built in popup
         let wrap = document.createElement('div')
         let grab = document.createElement('div')
@@ -1880,7 +1910,7 @@
         let grabbed = false
         let grabOff = [0, 0]
 
-        wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 50px; left: 50px; border: 2px solid #000000; z-index: 999999`
+        wrap.style = `position: fixed; height: ${options.height}px; width: ${options.width}px; background-color: white; top: 100px; left: 100px; border: 2px solid #000000; z-index: 999999`
         grab.style = `background-color: gray; height: 20px; width: ${options.width - 20}px; touch-action: none`
         close.style = 'background-color: white; width: 20px; height: 20px; margin-right: -20px; float: right; cursor: pointer; text-align: center'
         content.style = `height: ${options.height - 20}px; width: ${options.width}px;`
@@ -1917,6 +1947,8 @@
         grab.appendChild(close)
         wrap.appendChild(content)
         document.body.appendChild(wrap)
+
+        allWindows.push(wrap)
 
         return {win: content, remove: function() {
           wrap.remove()
@@ -2054,7 +2086,6 @@
 
         finalMesh.add(result);
       }
-
       function initExWin(mesh) {
         const curr = mesh || createdMesh;
 
@@ -2209,7 +2240,7 @@
       }
 
       function exportJSON() {
-        inExport = true;
+        window.onkeydown = function () {}
 
         scene.updateMatrixWorld(true);
 
