@@ -141,9 +141,9 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
-      <p>APP VERSION: 1.1.9</p>
       <input type="file" accept=".json" id="newFile"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
+      <p>Select Local DB: <select id="localSel"></select><button onclick="newLocal()">New Local DB</button></p>
       <br><br>
       <h4>3D Editors</h4>
       <button onclick="document.getElementById('model-wrap').style.display = 'block'">Spatial Index</button>
@@ -321,6 +321,7 @@
       <p>Username: <input type="text" placeholder="Username" id="username"></p>
       <p>Encryption Key: <input type="text" placeholder="Key" id="key"></p>
       <p id="error" style="background-color: red; padding: 3px; color: white; display: none"></p>
+      <p>Public Version Export: <input type="checkbox" id="exportPublic"></p>
       <input type="text" id="output">
       <button onclick="finish()">Generate</button>
     </details>
@@ -340,6 +341,24 @@
 
       var db = false
       var indexed = undefined
+      var localSel = 0
+
+      document.getElementById('localSel').addEventListener('change', function(e) {
+        localSel = document.getElementById('localSel').selectedIndex
+      })
+
+      function newLocal() {
+        let name = prompt('Name local')
+
+        db.locals.push({
+          name: name,
+          db: {
+            phone: [],
+            notes: [],
+            checklists: []
+          }
+        })
+      }
 
       async function forceUpdateApp() {
         try {
@@ -491,8 +510,14 @@
           updateTop()
           loadEditor()
 
-          // ANY DB FORMATTING CHANGES GO HERE
+          for(let i in db.locals) {
+            let wrapper = document.getElementById('localSel')
+            let option = document.createElement('option')
 
+            option.textContent = db.locals[i].name
+
+            wrapper.appendChild(option)
+          }
         }
       }
 
@@ -520,6 +545,7 @@
         let textarea = document.getElementById('area')
         let json = await getJSON(indexed, 'editDB')
         let text = json
+        console.log(text)
 
         editor.set(text);
       }
@@ -527,9 +553,9 @@
       // TO Search
       let toRes = document.getElementById('to-res')
       window.setTimeout(function() {
-        for(let i = 0; i < db.to.length; i++) {
+        for(let i = 0; i < db.system.to.length; i++) {
           let span = document.createElement('span')
-          span.textContent = db.to[i].name + " (" + db.to[i].TO + ", " + db.to[i].MIDAS + ")"
+          span.textContent = db.system.to[i].name + " (" + db.system.to[i].TO + ", " + db.system.to[i].MIDAS + ")"
           toRes.appendChild(span)
           toRes.appendChild(document.createElement('br'))
           toRes.appendChild(document.createElement('br'))
@@ -559,15 +585,15 @@
       sel2.innerHTML = ''
 
       window.setTimeout(function() {
-        for(let i in db.notes) {
+        for(let i in db.locals[localSel].db.notes) {
           let option = document.createElement('option')
-          option.textContent = db.notes[i].name
+          option.textContent = db.locals[localSel].db.notes[i].name
           sel2.appendChild(option)
         }
       }, 500)
 
       sel2.onchange = function() {
-        let data = db.notes[sel2.selectedIndex].steps
+        let data = db.locals[localSel].db.notes[sel2.selectedIndex].steps
 
         res.innerHTML = ''
         for(let i = 0; i < data.length; i++) {
@@ -580,13 +606,13 @@
           res.appendChild(document.createElement('br'))
 
           input.onkeyup = function() {
-            db.notes[sel2.selectedIndex].steps[i] = input.value
+            db.locals[localSel].db.notes[sel2.selectedIndex].steps[i] = input.value
           }
         }
       }
       function newRef() {
         let name = prompt("Reference Name: ")
-        db.notes.push({name: name, steps: []})
+        db.locals[localSel].db.notes.push({name: name, steps: []})
 
         let option = document.createElement('option')
         option.textContent = name
@@ -595,7 +621,7 @@
         saveTop()
       }
       function newStep() {
-        db.notes[sel2.selectedIndex].steps.push()
+        db.locals[localSel].db.notes[sel2.selectedIndex].steps.push()
 
         let option = document.createElement('textarea')
         option.rows = 10
@@ -616,8 +642,8 @@
       function updateTop() {
         topWrap.innerHTML = ''
 
-        for(let i = 0; i < db.ops[ind[sel.selectedIndex]].length; i++) {
-          let curr = db.ops[ind[sel.selectedIndex]][i]
+        for(let i = 0; i < db.system.ops[ind[sel.selectedIndex]].length; i++) {
+          let curr = db.system.ops[ind[sel.selectedIndex]][i]
           let wrap = document.createElement('div')
           let type = document.createElement('select')
           let name = document.createElement('input')
@@ -646,13 +672,13 @@
 
           // Updates
           body.onkeyup = function() {
-            db.ops[ind[sel.selectedIndex]][i].data = body.value
+            db.system.ops[ind[sel.selectedIndex]][i].data = body.value
           }
           name.onkeyup = function() {
-            db.ops[ind[sel.selectedIndex]][i].name = name.value
+            db.system.ops[ind[sel.selectedIndex]][i].name = name.value
           }
           type.onkeyup = function() {
-            db.ops[ind[sel.selectedIndex]][i].type = type.value
+            db.system.ops[ind[sel.selectedIndex]][i].type = type.value
           }
 
           wrap.appendChild(document.createElement('br'))
@@ -668,7 +694,7 @@
         }
       }
       function newTop() {
-        db.ops[ind[sel.selectedIndex]].push({type: 'tab', name: "", data: ""})
+        db.system.ops[ind[sel.selectedIndex]].push({type: 'tab', name: "", data: ""})
         updateTop()
       }
       function saveTop() {
@@ -708,8 +734,8 @@
           controls2.enableZoom = false
           controls2.rotateSpeed = 1
 
-          for(let i = 0; i < db.cpPanels.length; i++) {
-            let curr = db.cpPanels[i]
+          for(let i = 0; i < db.system.cpPanels.length; i++) {
+            let curr = db.system.cpPanels[i]
             let mesh = new THREE.Mesh(
               new THREE.SphereGeometry(0.1, 15, 15),
               new THREE.MeshBasicMaterial({color: 0xFF0000})
@@ -740,7 +766,7 @@
 
             if(sel.object.name[0] != "O") {
               let format = (val) => { return Math.floor(val * 100) }
-              let panel = db.cpPanels[intersects[0].object.name]
+              let panel = db.system.cpPanels[intersects[0].object.name]
               let ident = format(panel.cords[0]) + '/' + format(panel.cords[1]) + '/' + format(panel.cords[2])
               let data = db.panelData[ident]
               let res = document.getElementById('int-result2')
@@ -835,8 +861,8 @@
         scene3.add(gltf.scene)
 
         // Add saved panels
-        for(let i in db.panels) {
-          let curr = db.panels[i]
+        for(let i in db.system.panels) {
+          let curr = db.system.panels[i]
           let mesh = new THREE.Mesh(
             new THREE.SphereGeometry(1, 12, 12),
             new THREE.MeshBasicMaterial({color: 0xFF0000, opacity: 0.4, transparent: true})
@@ -893,12 +919,12 @@
               `
 
               if(index != undefined) {
-                number.value = db.panels[index].number ? db.panels[index].number : ""
-                ref.value = db.panels[index].ref != "undefined" ? db.panels[index].ref : ""
-                desc.value = db.panels[index].desc != "undefined" ? db.panels[index].desc : ""
-                fastener.value = db.panels[index].fast != "undefined" ? db.panels[index].fast : ""
+                number.value = db.system.panels[index].number ? db.system.panels[index].number : ""
+                ref.value = db.system.panels[index].ref != "undefined" ? db.system.panels[index].ref : ""
+                desc.value = db.system.panels[index].desc != "undefined" ? db.system.panels[index].desc : ""
+                fastener.value = db.system.panels[index].fast != "undefined" ? db.system.panels[index].fast : ""
 
-                type.selectedIndex = ["PANEL", "DOOR", "QUICK ACCESS DOOR", "STRESS PANEL"].indexOf(db.panels[index].type.toUpperCase())
+                type.selectedIndex = ["PANEL", "DOOR", "QUICK ACCESS DOOR", "STRESS PANEL"].indexOf(db.system.panels[index].type.toUpperCase())
               }
               let mesh
               // Create mesh
@@ -916,13 +942,13 @@
 
               save.onclick = function() {
                 if(index != undefined) {
-                  db.panels[index].number = number.value
-                  db.panels[index].ref = ref.value
-                  db.panels[index].desc = desc.value
-                  db.panels[index].type = type.value
-                  db.panels[index].fast = fastener.value
+                  db.system.panels[index].number = number.value
+                  db.system.panels[index].ref = ref.value
+                  db.system.panels[index].desc = desc.value
+                  db.system.panels[index].type = type.value
+                  db.system.panels[index].fast = fastener.value
                 } else {
-                  db.panels.push({
+                  db.system.panels.push({
                     number: number.value,
                     ref: ref.value,
                     desc: desc.value,
@@ -935,7 +961,7 @@
               }
               del.onclick = function() {
                 if(index != undefined) {
-                  db.panels.splice(index, 1)
+                  db.system.panels.splice(index, 1)
                 }
                 scene3.remove(mesh)
                 wind.remove()
@@ -1056,7 +1082,7 @@
 
       async function getWUC() {
         window.setTimeout(function() {
-          WUC = db.WUC
+          WUC = db.system.WUC
         }, 1500)
       }
       getWUC()
@@ -1138,7 +1164,7 @@
         plane.visible = false
 
         if(db != false) {
-          let components = db.components
+          let components = db.system.components
 
           for(let i = 0; i < components.length; i++) {
             const geometry = new THREE.Geometry();
@@ -2350,7 +2376,7 @@
           }
         };
 
-        db.components.push(json)
+        db.system.components.push(json)
         saveJSON(indexed, 'editDB', db)
         relatedParts = []
         window.location.reload()
@@ -3099,8 +3125,28 @@
       }, 10 * 1000)
 
       // Creating data file
+      let publicEle = document.getElementById('exportPublic')
 
       function finish() {
+        if(exportPublic.checked) {
+          let obj = {
+            ref: db.locals[localSel].db.notes,
+            panels: db.system.panels,
+            cpPanels: db.system.cpPanels,
+            panelData: db.system.panelData,
+            ops: db.system.ops
+          }
+
+          let blob = new Blob([JSON.stringify(obj)], { type: "application/json" });
+          let url = URL.createObjectURL(blob);
+          let a = document.createElement("a");
+          a.href = url;
+          a.download = 'reference.json';
+          a.click();
+
+          URL.revokeObjectURL(url);
+          return
+        }
         let name = document.getElementById('name')
         let els = document.getElementById('els')
         let key = document.getElementById('key')
@@ -3125,18 +3171,23 @@
 
         document.getElementById('output').value = JSON.stringify(b)
 
-        let obj = db
-        obj.meta = {
-          name: name.value,
-          els: els.value,
-          unit: base.value,
-          empNum: empNum.value,
+        let sel = document.getElementById('localSel')
+        let obj = {
+          meta: {
+            name: name.value,
+            els: els.value,
+            unit: base.value,
+            empNum: empNum.value,
+          },
+          local: db.locals[sel.selectedIndex],
+          system: db.system,
+          version: db.version
         }
 
         encryptAES(obj, username.value + key.value).then((data) => {
-          const blob = new Blob([data], { type: "application/octet-stream" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
+          let blob = new Blob([data], { type: "application/octet-stream" });
+          let url = URL.createObjectURL(blob);
+          let a = document.createElement("a");
           a.href = url;
           a.download = 'reference.enc';
           a.click();
