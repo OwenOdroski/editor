@@ -130,6 +130,18 @@
        box-sizing: border-box;
        resize: none;
      }
+     #noc-wrap {
+       position: fixed;
+       top: 50%;
+       left: 50%;
+       width: 50%;
+       height: 50%;
+       background-color: white;
+       border: 2px solid #000000;
+       transform: translate(-50%, -50%);
+       padding: 16px;
+       display: none
+     }
   </style>
   <body>
     <!--
@@ -149,6 +161,7 @@
       <button onclick="document.getElementById('model-wrap').style.display = 'block'">Spatial Index</button>
       <button onclick="document.getElementById('ext-wrap').style.display = 'block'">Panel Chart</button>
       <button onclick="document.getElementById('int-wrap').style.display = 'block'">Cockpit Chart</button>
+      <button onclick="document.getElementById('noc-wrap').style.display = 'block'">Add Indexed NOC</button>
 
       <h4>Text Editors</h4>
       <button onclick="document.getElementById('top-wrap').style.display = 'block'">Theory of Operation</button>
@@ -183,6 +196,20 @@
         <button onclick="saveTop()">Save</button>
         <div id="int-result2" style="overflow-y: auto; height: calc(100% - 50px)"></div>
       </div>
+    </div>
+
+    <div id="noc-wrap">
+      <h2>Add Spatial Index NOC Item</h2>
+
+      <p>Nomen: <input id="noc-nomen" placeholder="Nomenclature"></p>
+      <p>Related System: <select id="noc-relsys"></select></p>
+      <p>Work Unit Code: <input id="noc-wuc" placeholder="WUC"><p id="noc-wuc-out"></p></p>
+      <p>TO Reference: <input id="noc-ref" placeholder="TO Reference"></p>
+      <p>Part Number: <input id="noc-pNum" placeholder="P/N"></p>
+      <p>Description: <input id="noc-desc" placeholder="Description"></p>
+
+      <button onclick="exportNOC()">Export</button>
+      <button onclick="document.getElementById('noc-wrap').style.display = 'none'">Cancel</button>
     </div>
 
     <div id="top-wrap">
@@ -1054,6 +1081,7 @@
       let move = document.getElementById('mov')
       let rota = document.getElementById('rota')
       let sys = document.getElementById('system')
+      let NOCSys = document.getElementById('noc-relsys')
       let relatedParts = []
       let modelGroup = new THREE.Group()
       let WUC = [] // Work Unit Codes for naming verification
@@ -1088,6 +1116,8 @@
       getWUC()
 
       const WUCFill = document.getElementById('WUC');
+      const NOC = document.getElementById('noc-wuc');
+      const NOCOut = document.getElementById('noc-wuc-out');
       const WUCOut = document.getElementById('WUCOut');
 
       function resizeDrawCanvas() {
@@ -1134,13 +1164,40 @@
         }
 
       });
+      NOC.addEventListener('input', () => {
+
+        const code = NOC.value.trim().toUpperCase();
+        function format(text) {
+          return text.slice(0, 5)
+        }
+
+        if(code.length !== 5) {
+          NOCOut.textContent = '';
+          return;
+        }
+
+        const found = WUC.find(
+          w => format(w.code).toUpperCase() === code
+        );
+
+        if(found) {
+          NOCOut.innerHTML =
+            `${found.desc}<br>(${found.system})`;
+        } else {
+          NOCOut.textContent = 'WUC not found';
+        }
+
+      });
 
       for(let i = 0; i < catagories.length; i++) {
         let option = document.createElement('option')
+        let option2 = document.createElement('option')
 
         option.textContent = catagories[i].toUpperCase()
+        option2.textContent = catagories[i].toUpperCase()
 
         sys.appendChild(option)
+        NOCSys.appendChild(option2)
       }
 
       load.load('f16.glb', (gltf) => {
@@ -2380,6 +2437,20 @@
         saveJSON(indexed, 'editDB', db)
         relatedParts = []
         window.location.reload()
+      }
+      function exportNOC() {
+        let exp = {
+          nomen: document.getElementById('noc-nomen').value,
+          ref: document.getElementById('noc-ref').value,
+          wuc: document.getElementById('noc-wuc').value,
+          pNum: document.getElementById('noc-pNum').value,
+          desc: document.getElementById('noc-desc').value,
+          section: document.getElementById('noc-relsys').value,
+          type: "noc"
+        }
+        db.system.components.push(exp)
+        saveJSON(indexed, 'editDB', db)
+        document.getElementById('noc-wrap').style.display = 'none'
       }
       function place() {
         placeSettings = true
