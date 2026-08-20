@@ -641,6 +641,9 @@
       }
       function newRef() {
         let name = prompt("Reference Name: ")
+        if(name == "" || name == null || name == undefined) {
+          return
+        }
         db.locals[localSel].db.notes.push({name: name, steps: []})
 
         let option = document.createElement('option')
