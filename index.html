@@ -518,8 +518,10 @@
 
               if(!c) {
                 saveJSON(a, "editDB", json)
+                window.location.reload()
               } else if(confirm("Replace existing DB?")) {
                 saveJSON(a, "editDB", json)
+                window.location.reload()
               }
           } catch (err) {
               console.error("Invalid JSON:", err);
@@ -648,7 +650,7 @@
         saveTop()
       }
       function newStep() {
-        db.locals[localSel].db.notes[sel2.selectedIndex].steps.push()
+        db.locals[localSel].db.notes[sel2.selectedIndex].steps.push("")
 
         let option = document.createElement('textarea')
         option.rows = 10
@@ -2451,6 +2453,7 @@
         db.system.components.push(exp)
         saveJSON(indexed, 'editDB', db)
         document.getElementById('noc-wrap').style.display = 'none'
+        window.location.reload()
       }
       function place() {
         placeSettings = true
