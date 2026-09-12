@@ -679,7 +679,6 @@
         let textarea = document.getElementById('area')
         let json = await getJSON(indexed, 'editDB')
         let text = json
-        console.log(text)
 
         editor.set(text);
       }
@@ -694,7 +693,7 @@
           toRes.appendChild(document.createElement('br'))
           toRes.appendChild(document.createElement('br'))
         }
-      }, 500)
+      }, 3000)
 
       function addTO() {
         let nomen = document.getElementById('to-nomen')
@@ -724,7 +723,7 @@
           option.textContent = db.locals[localSel].db.notes[i].name
           sel2.appendChild(option)
         }
-      }, 500)
+      }, 3000)
 
       sel2.onchange = function() {
         let data = db.locals[localSel].db.notes[sel2.selectedIndex].steps
