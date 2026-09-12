@@ -142,6 +142,74 @@
        padding: 16px;
        display: none
      }
+     #console {
+        background: #111318;
+        color: #d7d7d7;
+
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 13px;
+        line-height: 1.45;
+
+        border: 1px solid #30343b;
+        border-radius: 6px;
+
+        overflow-y: auto;
+    }
+
+    /* Every console entry */
+    .console-log,
+    .console-info,
+    .console-warn,
+    .console-error,
+    .console-debug {
+        padding: 5px 10px;
+        border-bottom: 1px solid #24272d;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    /* Normal console.log() */
+    .console-log {
+        color: #d7d7d7;
+        background: transparent;
+    }
+
+    /* console.info() */
+    .console-info {
+        color: #8ab4f8;
+        background: rgba(66, 133, 244, 0.08);
+        border-left: 3px solid #4285f4;
+    }
+
+    /* console.warn() */
+    .console-warn {
+        color: #fdd663;
+        background: rgba(251, 188, 4, 0.10);
+        border-left: 3px solid #fbbc04;
+    }
+
+    /* console.error() */
+    .console-error {
+        color: #ff8a80;
+        background: rgba(234, 67, 53, 0.10);
+        border-left: 3px solid #ea4335;
+    }
+
+    /* console.debug() */
+    .console-debug {
+        color: #9aa0a6;
+        background: rgba(154, 160, 166, 0.06);
+        border-left: 3px solid #6f7479;
+    }
+
+    /* Optional hover */
+    .console-log:hover,
+    .console-info:hover,
+    .console-warn:hover,
+    .console-error:hover,
+    .console-debug:hover {
+        filter: brightness(1.15);
+    }
   </style>
   <body>
     <!--
@@ -353,6 +421,11 @@
       <button onclick="finish()">Generate</button>
     </details>
 
+    <details>
+      <summary>Console</summary>
+      <div id="console"></div>
+    </details>
+
     <script src="./three.js"></script>
     <script src="./Orbit.js"></script>
     <script src="./Loader.js"></script>
@@ -360,6 +433,38 @@
     <script src="./csg-worker.js"></script>
     <script src="./three-csg.js"></script>
     <script defer>
+
+    const consoleDiv = document.getElementById("console");
+
+    ["log", "warn", "error", "info", "debug"].forEach(type => {
+        const original = console[type];
+
+        console[type] = function (...args) {
+            original.apply(console, args);
+
+            const line = document.createElement("div");
+            line.className = `console-${type}`;
+
+            line.textContent = args.map(arg => {
+                if (typeof arg === "object") {
+                    try {
+                      if(JSON.stringify(arg, null, 2).length < 200) {
+                        return JSON.stringify(arg, null, 2);
+                      } else {
+                        let str = JSON.stringify(arg, null, 2).slice(0, -200)
+                        return "String too long";
+                      }
+                    } catch {
+                        return String(arg);
+                    }
+                }
+
+                return String(arg);
+            }).join(" ");
+
+            consoleDiv.appendChild(line);
+        };
+    });
 
       // DB Handling
       const DB_NAME = "index"
@@ -604,7 +709,7 @@
         let d = new Date()
         let date = d.getFullYear() + "" + format(d.getMonth() + 1) + "" + format(d.getDate())
 
-        db.to.push({name: nomen.value, TO: to.value, MIDAS: midas.value, date: date})
+        db.system.to.push({name: nomen.value, TO: to.value, MIDAS: midas.value, date: date})
         saveTop()
       }
 
@@ -1232,6 +1337,7 @@
             const geometry = new THREE.Geometry();
             const modelData = components[i].modelData
 
+            if(!components[i].modelData) continue
             for(let v of modelData.vertices) {
               geometry.vertices.push(
                 new THREE.Vector3(v[0], v[1], v[2])
