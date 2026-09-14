@@ -337,6 +337,7 @@
             Apple Pencil Only
             <input type="checkbox" id="pen">
           </label>
+          <button onclick="createDup()">Create Duplicate</button>
           <select id="customShape">
             <option>-- Shape --</option>
             <option>Sphere</option>
@@ -364,7 +365,7 @@
           <div class="spacer"></div>
           <button onclick="document.getElementById('model-wrap').style.display = 'none'">Close</button>
           <button onclick="document.getElementById('settings').style.display='block'">Settings</button>
-          <button onclick="document.getElementById('export').style.display='block';inExport=true">Export</button>
+          <button onclick="beginExport()">Export</button>
           <select id="preset-loc">
             <option>-- None Selected --</option>
             <option>Left MLG</option>
@@ -426,6 +427,14 @@
       <div id="console"></div>
     </details>
 
+    <div class="popup" id="createDup-popup">
+      <h2>Create Duplicate Part</h2>
+      <div id="modelled-parts"></div>
+
+      <button onclick="copyAll()">Copy all</button>
+      <button onclick="copyModel()">Copy only model</button>
+    </div>
+
     <script src="./three.js"></script>
     <script src="./Orbit.js"></script>
     <script src="./Loader.js"></script>
@@ -474,6 +483,10 @@
       var db = false
       var indexed = undefined
       var localSel = 0
+      let copy = {
+        type: "none",
+        ref: undefined
+      }
 
       document.getElementById('localSel').addEventListener('change', function(e) {
         localSel = document.getElementById('localSel').selectedIndex
@@ -1333,10 +1346,22 @@
           let components = db.system.components
 
           for(let i = 0; i < components.length; i++) {
-            const geometry = new THREE.Geometry();
-            const modelData = components[i].modelData
+            if(components[i].type == 'noc') continue
 
-            if(!components[i].modelData) continue
+            let geometry = new THREE.Geometry();
+            let modelData, t
+
+            if(components[i].load_type == "copy-all") {
+              modelData = components[components[i].ref].modelData
+              t = components[i].transform
+            } else if(components[i].load_type == "copy-model") {
+              modelData = components[components[i].modelData.ref].modelData
+              t = components[i].modelData.transform
+            } else {
+              modelData = components[i].modelData
+              t = components[i].modelData.transform
+            }
+
             for(let v of modelData.vertices) {
               geometry.vertices.push(
                 new THREE.Vector3(v[0], v[1], v[2])
@@ -1360,8 +1385,6 @@
             );
 
             mesh.name = "x" + i;
-
-            const t = modelData.transform;
 
             mesh.position.set(t.pos[0], t.pos[1], t.pos[2]);
             mesh.rotation.set(t.rot[0], t.rot[1], t.rot[2]);
@@ -1395,6 +1418,128 @@
 
           list.appendChild(c)
         }
+      }
+      let selCopy = undefined
+
+      function createMeshFromDB(modelData) {
+        const geometry = new THREE.Geometry();
+
+        for(let v of modelData.vertices) {
+          geometry.vertices.push(
+            new THREE.Vector3(v[0], v[1], v[2])
+          );
+        }
+
+        for(let f of modelData.faces) {
+          geometry.faces.push(
+            new THREE.Face3(f[0], f[1], f[2])
+          );
+        }
+
+        geometry.computeFaceNormals();
+        geometry.computeVertexNormals();
+
+        const mesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshBasicMaterial({
+            color: 0x00ff00
+          })
+        );
+
+        const t = modelData.transform;
+
+        mesh.rotation.set(t.rot[0], t.rot[1], t.rot[2]);
+        mesh.scale.set(t.scale[0], t.scale[1], t.scale[2]);
+
+        return mesh
+      }
+
+      function createDup() {
+        document.getElementById('createDup-popup').style.display = "block"
+        let wrapper = document.getElementById('modelled-parts')
+
+        // Get parts
+        let index = 0
+        for(let curr of db.system.components) {
+          if(curr.modelData != undefined) {
+            let name = document.createElement('p')
+
+            name.textContent = curr.WUC
+            name.style = "margin-top: 8px"
+            name.id = index
+
+            name.onclick = function() {
+              for(let i in wrapper.children) {
+                if(wrapper.children[i].style) {
+                  wrapper.children[i].style.color = "black"
+                }
+              }
+              name.style.color = "red"
+
+              selCopy = name.id
+              copy.ref = name.id
+            }
+
+            wrapper.appendChild(name)
+          }
+          index += 1
+        }
+      }
+      function copyAll() {
+        if(!selCopy) { alert('Must choose model part'); return }
+
+        // Go straight to plane
+
+        // Set camera to PerspectiveCamera
+        cameraPersp.position.copy(cameraOrtho.position);
+        cameraPersp.quaternion.copy(cameraOrtho.quaternion);
+
+        camera = cameraPersp
+        controls.object = cameraPersp;
+
+        cameraPersp.updateProjectionMatrix();
+
+        let mesh = createMeshFromDB(db.system.components[selCopy].modelData)
+        document.getElementById('drawSettings').style.display = 'none'
+        document.getElementById('drawCanvas').style.display = 'none'
+
+        expMesh = mesh
+        createdMesh = mesh
+        selectedObj = mesh
+        finalMesh.add(mesh)
+
+        copy.type = "copy-all"
+
+        place(true)
+        document.getElementById('createDup-popup').style.display = 'none'
+      }
+      function copyModel() {
+        if(!selCopy) { alert('Must choose model part'); return }
+
+        // Set camera to PerspectiveCamera
+        cameraPersp.position.copy(cameraOrtho.position);
+        cameraPersp.quaternion.copy(cameraOrtho.quaternion);
+
+        camera = cameraPersp
+        controls.object = cameraPersp;
+
+        cameraPersp.updateProjectionMatrix();
+
+        let mesh = createMeshFromDB(db.system.components[selCopy].modelData)
+        document.getElementById('drawSettings').style.display = 'none'
+        document.getElementById('drawCanvas').style.display = 'none'
+
+        mesh.geometry.computeBoundingBox();
+
+        copy.type = "copy-model"
+
+        expMesh = mesh
+        createdMesh = mesh
+        selectedObj = mesh
+        finalMesh.add(mesh)
+
+        place(true)
+        document.getElementById('createDup-popup').style.display = 'none'
       }
 
       let dragging = null;
@@ -2432,6 +2577,49 @@
         return Math.round(n * p) / p;
       }
 
+      function beginExport() {
+        document.getElementById('export').style.display='block';
+        inExport = true
+
+        if(copy.type == "copy-all") {
+          let to = document.getElementById("to")
+          let wuc = document.getElementById("WUC")
+          let pn = document.getElementById("pn")
+          let desc = document.getElementById("desc")
+          let related = document.getElementById("rel-list")
+          let system = document.getElementById("system")
+
+          to.readOnly = true;
+          wuc.readOnly = true;
+          pn.readOnly = true;
+          desc.readOnly = true
+          system.disabled = true
+
+          to.value = db.system.components[copy.ref].to
+          wuc.value = db.system.components[copy.ref].WUC
+          pn.value = db.system.components[copy.ref].pn
+          desc.value = db.system.components[copy.ref].desc
+
+          wuc.dispatchEvent(new Event("input"));
+
+          const option = [...system.options].find(
+              option => option.textContent.trim() === db.system.components[copy.ref].related.trim()
+          );
+
+          if (option) {
+              system.value = option.value;
+          }
+
+          for(let curr of db.system.components[copy.ref].related) {
+            let p = document.createElement('p')
+
+            p.textContent = curr.nomen
+
+            related.appendChild(p)
+          }
+        }
+      }
+
       function exportJSON() {
         window.onkeydown = function () {}
 
@@ -2452,77 +2640,102 @@
 
         let vertices = [];
         let faces = [];
+        let json
 
         // OLD THREE.Geometry
-        if(geo.vertices && geo.faces) {
+        if(copy.type == "none") {
+          if(geo.vertices && geo.faces) {
 
-          for(let v of geo.vertices) {
-            vertices.push([
-              r(v.x),
-              r(v.y),
-              r(v.z)
-            ]);
-          }
+            for(let v of geo.vertices) {
+              vertices.push([
+                r(v.x),
+                r(v.y),
+                r(v.z)
+              ]);
+            }
 
-          for(let f of geo.faces) {
-            faces.push([
-              f.a,
-              f.b,
-              f.c
-            ]);
-          }
-
-        } else {
-
-          // BUFFER GEOMETRY SUPPORT
-          const posAttr = geo.attributes.position.array;
-
-          for(let i = 0; i < posAttr.length; i += 3) {
-            vertices.push([
-              r(posAttr[i]),
-              r(posAttr[i + 1]),
-              r(posAttr[i + 2])
-            ]);
-          }
-
-          // Indexed geometry
-          if(geo.index) {
-
-            const idx = geo.index.array;
-
-            for(let i = 0; i < idx.length; i += 3) {
+            for(let f of geo.faces) {
               faces.push([
-                idx[i],
-                idx[i + 1],
-                idx[i + 2]
+                f.a,
+                f.b,
+                f.c
               ]);
             }
 
           } else {
 
-            // Non-indexed geometry
-            for(let i = 0; i < vertices.length; i += 3) {
-              faces.push([
-                i,
-                i + 1,
-                i + 2
+            // BUFFER GEOMETRY SUPPORT
+            const posAttr = geo.attributes.position.array;
+
+            for(let i = 0; i < posAttr.length; i += 3) {
+              vertices.push([
+                r(posAttr[i]),
+                r(posAttr[i + 1]),
+                r(posAttr[i + 2])
               ]);
             }
 
-          }
-        }
+            // Indexed geometry
+            if(geo.index) {
 
-        const json = {
-          to: document.getElementById('to').value,
-          desc: document.getElementById('desc').value,
-          WUC: document.getElementById('WUC').value,
-          section: document.getElementById('system').value,
-          pn: document.getElementById('pn').value,
-          d: new Date(),
-          related: relatedParts,
-          modelData: {
-            vertices: vertices,
-            faces: faces,
+              const idx = geo.index.array;
+
+              for(let i = 0; i < idx.length; i += 3) {
+                faces.push([
+                  idx[i],
+                  idx[i + 1],
+                  idx[i + 2]
+                ]);
+              }
+
+            } else {
+
+              // Non-indexed geometry
+              for(let i = 0; i < vertices.length; i += 3) {
+                faces.push([
+                  i,
+                  i + 1,
+                  i + 2
+                ]);
+              }
+
+            }
+          }
+
+          json = {
+            to: document.getElementById('to').value,
+            desc: document.getElementById('desc').value,
+            WUC: document.getElementById('WUC').value,
+            section: document.getElementById('system').value,
+            pn: document.getElementById('pn').value,
+            d: new Date(),
+            related: relatedParts,
+            modelData: {
+              vertices: vertices,
+              faces: faces,
+              transform: {
+                pos: [
+                  r(pos.x),
+                  r(pos.y),
+                  r(pos.z)
+                ],
+                rot: [
+                  r(rot.x),
+                  r(rot.y),
+                  r(rot.z)
+                ],
+                scale: [
+                  r(scale.x),
+                  r(scale.y),
+                  r(scale.z)
+                ]
+              }
+            }
+          };
+        } else if(copy.type == "copy-all") {
+          json = {
+            load_type: "copy-all",
+            ref: copy.ref,
             transform: {
               pos: [
                 r(pos.x),
@@ -2541,7 +2754,38 @@
               ]
             }
           }
-        };
+        } else if(copy.type == "copy-model") {
+          json = {
+            load_type: "copy-model",
+            to: document.getElementById('to').value,
+            desc: document.getElementById('desc').value,
+            WUC: document.getElementById('WUC').value,
+            section: document.getElementById('system').value,
+            pn: document.getElementById('pn').value,
+            d: new Date(),
+            related: relatedParts,
+            modelData: {
+              ref: copy.ref,
+              transform: {
+                pos: [
+                  r(pos.x),
+                  r(pos.y),
+                  r(pos.z)
+                ],
+                rot: [
+                  r(rot.x),
+                  r(rot.y),
+                  r(rot.z)
+                ],
+                scale: [
+                  r(scale.x),
+                  r(scale.y),
+                  r(scale.z)
+                ]
+              }
+            }
+          };
+        }
 
         db.system.components.push(json)
         saveJSON(indexed, 'editDB', db)
@@ -2563,7 +2807,7 @@
         document.getElementById('noc-wrap').style.display = 'none'
         window.location.reload()
       }
-      function place() {
+      function place(skipScale) {
         placeSettings = true
         document.getElementById('placeSettings').style.display = 'none';
         document.getElementById('final').style.display = 'inline-block';
@@ -2573,25 +2817,33 @@
         comp.visible = true;
 
         // Scale the mesh itself. An object's own scale does not shrink its position.
-        finalMesh.children[0].scale.multiplyScalar(0.01);
+        if(!skipScale) {
+          finalMesh.children[0].scale.multiplyScalar(0.01);
 
-        // Apply the scale to the geometry and reset to 1
-        const scaleMatrix = new THREE.Matrix4().makeScale(
-          finalMesh.children[0].scale.x,
-          finalMesh.children[0].scale.y,
-          finalMesh.children[0].scale.z
-        );
+          // Apply the scale to the geometry and reset to 1
+          const scaleMatrix = new THREE.Matrix4().makeScale(
+            finalMesh.children[0].scale.x,
+            finalMesh.children[0].scale.y,
+            finalMesh.children[0].scale.z
+          );
 
-        finalMesh.children[0].geometry.applyMatrix4(scaleMatrix);
-        finalMesh.children[0].scale.set(1, 1, 1);
+          finalMesh.children[0].geometry.applyMatrix4(scaleMatrix);
+          finalMesh.children[0].scale.set(1, 1, 1);
 
-        // Refresh derived geometry data.
-        finalMesh.children[0].geometry.computeBoundingBox();
-        finalMesh.children[0].geometry.computeBoundingSphere();
-        finalMesh.children[0].geometry.computeVertexNormals();
+          // Refresh derived geometry data.
+          finalMesh.children[0].geometry.computeBoundingBox();
+          finalMesh.children[0].geometry.computeBoundingSphere();
+          finalMesh.children[0].geometry.computeVertexNormals();
 
-        finalMesh.children[0].updateMatrix();
-        finalMesh.children[0].updateMatrixWorld(true);
+          finalMesh.children[0].updateMatrix();
+          finalMesh.children[0].updateMatrixWorld(true);
+        } else {
+          finalMesh.children[0].scale.set(
+            db.system.components[copy.ref].modelData.transform.scale[0],
+            db.system.components[copy.ref].modelData.transform.scale[1],
+            db.system.components[copy.ref].modelData.transform.scale[2],
+          )
+        }
 
         // Center mesh
         const mesh = finalMesh.children[0];
@@ -2609,7 +2861,7 @@
 
         mesh.position.set(0, 0, 0);
         mesh.rotation.set(0, 0, 0);
-        mesh.scale.set(1, 1, 1);
+        if(!skipScale) mesh.scale.set(1, 1, 1);
 
         mesh.geometry.computeBoundingBox();
         mesh.geometry.computeBoundingSphere();
@@ -2623,7 +2875,6 @@
         }
 
         scene.scale.set(1, 1, 1);
-
         finalMesh.scale.set(1, 1, 1);
 
         expMesh = finalMesh.children[0];
