@@ -210,6 +210,17 @@
     .console-debug:hover {
         filter: brightness(1.15);
     }
+    #check-wrap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 100;
+      background-color: white;
+      padding: 16px;
+      display: none;
+    }
   </style>
   <body>
     <!--
@@ -221,7 +232,7 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
-      <input type="file" accept=".json" id="newFile"><br><br>
+      <input type="file" accept=".json, .enc" id="newFile"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <p>Select Local DB: <select id="localSel"></select><button onclick="newLocal()">New Local DB</button></p>
       <br><br>
@@ -235,10 +246,26 @@
       <button onclick="document.getElementById('top-wrap').style.display = 'block'">Theory of Operation</button>
       <button onclick="document.getElementById('ref-wrap').style.display = 'block'">References</button>
       <button onclick="document.getElementById('to-wrap').style.display = 'block'">TO Search</button>
+      <button onclick="document.getElementById('check-wrap').style.display = 'block'">Checklists</button>
       <button onclick="document.getElementById('json-wrap').style.display = 'block'">Edit File</button>
 
       <h4>System Options</h4>
       <button onclick="forceUpdateApp()">Update App</button>
+    </div>
+
+    <div id="check-wrap">
+      <h2>Checklists</h2>
+
+      <button onclick="document.getElementById('view-checklist').style.display = 'block'; viewChecklist()">New Checklist</button>
+      <div id="all-checklist"></div>
+
+      <div style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: white; padding: 16px" id="view-checklist">
+        <h2>New/Edit Checklist</h2>
+
+        <button id="newStep">New Step</button>
+        <button onclick="saveTop()">Save</button>
+        <div id="steps"></div>
+      </div>
     </div>
 
     <div id="json-wrap">
@@ -418,6 +445,7 @@
       <p>Encryption Key: <input type="text" placeholder="Key" id="key"></p>
       <p id="error" style="background-color: red; padding: 3px; color: white; display: none"></p>
       <p>Public Version Export: <input type="checkbox" id="exportPublic"></p>
+      <p>Air Force System Data Only: <input type="checkbox" id="exportAF"></p>
       <input type="text" id="output">
       <button onclick="finish()">Generate</button>
     </details>
@@ -500,7 +528,8 @@
           db: {
             phone: [],
             notes: [],
-            checklists: []
+            checklists: [],
+            callsign: []
           }
         })
       }
@@ -629,18 +658,36 @@
           if (!file) return;
 
           try {
-              const text = await file.text();   // Read file as text
-              const json = JSON.parse(text);    // Convert to JavaScript object
-              let a = await setupDB()
-              let c = await hasJSON(a, 'editDB')
+            let json
+            let text = await file.text()
 
-              if(!c) {
-                saveJSON(a, "editDB", json)
-                window.location.reload()
-              } else if(confirm("Replace existing DB?")) {
-                saveJSON(a, "editDB", json)
-                window.location.reload()
+            if (file.name.toLowerCase().endsWith(".enc")) {
+              let username = prompt("Username: ")
+              let password = prompt("Password: ")
+
+              let d = await decryptAES(text, username + password)
+              let data = d.value
+
+              // Convert to local/system type format
+              json = {
+                locals: [data.local],
+                system: data.system,
+                version: data.version
               }
+            } else {
+              json = JSON.parse(text);
+            }
+
+            let a = await setupDB()
+            let c = await hasJSON(a, 'editDB')
+
+            if(!c) {
+              saveJSON(a, "editDB", json)
+              window.location.reload()
+            } else if(confirm("Replace existing DB?")) {
+              saveJSON(a, "editDB", json)
+              window.location.reload()
+            }
           } catch (err) {
               console.error("Invalid JSON:", err);
           }
@@ -656,6 +703,7 @@
           db = await getJSON(a, 'editDB')
           updateTop()
           loadEditor()
+          loadChecklists()
 
           for(let i in db.locals) {
             let wrapper = document.getElementById('localSel')
@@ -723,6 +771,67 @@
 
         db.system.to.push({name: nomen.value, TO: to.value, MIDAS: midas.value, date: date})
         saveTop()
+      }
+
+      function loadChecklists() {
+        let wrapper = document.getElementById('all-checklist')
+
+        for(let i in db.locals[localSel].db.checklists) {
+          let curr = db.locals[localSel].db.checklists[i]
+          let p = document.createElement('p')
+
+          p.textContent = curr.name
+          p.onclick = function() {
+            viewChecklist(i)
+            document.getElementById('view-checklist').style.display = 'block'
+          }
+
+          wrapper.appendChild(p)
+        }
+      }
+
+      function viewChecklist(index) {
+        if(index === undefined) {
+          let name = prompt("Name: ")
+          if(name === null) return
+
+          db.locals[localSel].db.checklists.push({
+            name: name,
+            steps: []
+          })
+
+          index = db.locals[localSel].db.checklists.length - 1
+        }
+
+        let checklist = db.locals[localSel].db.checklists[index]
+        let parent = document.getElementById('steps')
+
+        // Clear previous checklist
+        parent.replaceChildren()
+
+        function addInput(stepIndex) {
+          let input = document.createElement('input')
+          input.type = "text"
+          input.value = checklist.steps[stepIndex]
+
+          input.oninput = function() {
+            checklist.steps[stepIndex] = input.value
+          }
+
+          parent.appendChild(input)
+          parent.appendChild(document.createElement('br'))
+        }
+
+        document.getElementById('newStep').onclick = function() {
+          let stepIndex = checklist.steps.length
+
+          checklist.steps.push("Empty step")
+          addInput(stepIndex)
+        }
+
+        for(let i = 0; i < checklist.steps.length; i++) {
+          addInput(i)
+        }
       }
 
       // References
@@ -3559,6 +3668,7 @@
 
       // Creating data file
       let publicEle = document.getElementById('exportPublic')
+      let afEle = document.getElementById('exportAF')
 
       function finish() {
         if(exportPublic.checked) {
@@ -3569,6 +3679,23 @@
             panelData: db.system.panelData,
             ops: db.system.ops
           }
+
+          let blob = new Blob([JSON.stringify(obj)], { type: "application/json" });
+          let url = URL.createObjectURL(blob);
+          let a = document.createElement("a");
+          a.href = url;
+          a.download = 'reference.json';
+          a.click();
+
+          URL.revokeObjectURL(url);
+          return
+        } else if(afEle.checked) {
+          let obj = db.system
+
+          // For the testing site
+          obj.WUC = []
+          obj.ref = []
+          obj.components = []
 
           let blob = new Blob([JSON.stringify(obj)], { type: "application/json" });
           let url = URL.createObjectURL(blob);
@@ -3628,56 +3755,117 @@
           URL.revokeObjectURL(url);
         })
       }
-      async function encryptAES(data, password) {
-        const enc = new TextEncoder();
+      const enc = new TextEncoder();
+      const dec = new TextDecoder();
 
-        const plaintext = typeof data === "string" ? data : JSON.stringify(data);
-
-        const salt = crypto.getRandomValues(new Uint8Array(16));
-
-        const keyMaterial = await crypto.subtle.importKey(
-          "raw",
-          enc.encode(password),
-          "PBKDF2",
-          false,
-          ["deriveKey"]
-        );
-
-        const key = await crypto.subtle.deriveKey(
-          { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-          keyMaterial,
-          { name: "AES-GCM", length: 256 },
-          false,
-          ["encrypt"]
-        );
-
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-
-        const encryptedBuf = await crypto.subtle.encrypt(
-          { name: "AES-GCM", iv },
-          key,
-          enc.encode(plaintext)
-        );
-
-        const encryptedBytes = new Uint8Array(encryptedBuf);
-
-        // salt (16) + iv (12) + ciphertext
-        const combined = new Uint8Array(16 + 12 + encryptedBytes.length);
-        combined.set(salt, 0);
-        combined.set(iv, 16);
-        combined.set(encryptedBytes, 28);
-
-        return bytesToBase64(combined);
-      }
       function bytesToBase64(bytes) {
-        let binary = "";
-        const chunkSize = 0x8000; // 32KB chunks
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.subarray(i, i + chunkSize);
-          binary += String.fromCharCode.apply(null, chunk);
-        }
-        return btoa(binary);
+        let s = "";
+        for (const b of bytes) s += String.fromCharCode(b);
+        return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
       }
+      function b64urlToBytes(b64url) {
+        const pad = "=".repeat((4 - (b64url.length % 4)) % 4);
+        const b64 = (b64url + pad).replace(/-/g, "+").replace(/_/g, "/");
+        const raw = atob(b64);
+        return Uint8Array.from(raw, c => c.charCodeAt(0));
+      }
+
+      async function encryptAES(data, password) {
+       const enc = new TextEncoder();
+
+       const plaintext = typeof data === "string" ? data : JSON.stringify(data);
+
+       const salt = crypto.getRandomValues(new Uint8Array(16));
+
+       const keyMaterial = await crypto.subtle.importKey(
+         "raw",
+         enc.encode(password),
+         "PBKDF2",
+         false,
+         ["deriveKey"]
+       );
+
+       const key = await crypto.subtle.deriveKey(
+         { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+         keyMaterial,
+         { name: "AES-GCM", length: 256 },
+         false,
+         ["encrypt"]
+       );
+
+       const iv = crypto.getRandomValues(new Uint8Array(12));
+
+       const encryptedBuf = await crypto.subtle.encrypt(
+         { name: "AES-GCM", iv },
+         key,
+         enc.encode(plaintext)
+       );
+
+       const encryptedBytes = new Uint8Array(encryptedBuf);
+
+       // salt (16) + iv (12) + ciphertext
+       const combined = new Uint8Array(16 + 12 + encryptedBytes.length);
+       combined.set(salt, 0);
+       combined.set(iv, 16);
+       combined.set(encryptedBytes, 28);
+
+       return bytesToBase64(combined);
+     }
+
+      async function decryptAES(base64Data, password) {
+        const enc = new TextEncoder();
+        const dec = new TextDecoder();
+
+        try {
+          const combined = b64urlToBytes(base64Data);
+
+          if (combined.length < 16 + 12 + 1) {
+            return { ok: false, reason: "bad_format", error: "Too short" };
+          }
+
+          const salt = combined.slice(0, 16);
+          const iv = combined.slice(16, 28);
+          const ciphertext = combined.slice(28);
+
+          const keyMaterial = await crypto.subtle.importKey(
+            "raw",
+            enc.encode(password),
+            "PBKDF2",
+            false,
+            ["deriveKey"]
+          );
+
+          const key = await crypto.subtle.deriveKey(
+            { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+            keyMaterial,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["decrypt"]
+          );
+
+          const decryptedBuf = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv },
+            key,
+            ciphertext
+          );
+
+          const text = dec.decode(decryptedBuf);
+
+          try {
+            return { ok: true, value: JSON.parse(text) };
+          } catch {
+            return { ok: true, value: text, warning: "not_json" };
+          }
+        } catch (err) {
+          return {
+            ok: false,
+            reason: "decrypt_failed",
+            errorName: err?.name || "Error",
+            errorMessage: err?.message || String(err)
+          };
+        }
+      }
+
     </script>
   </body>
 </html>
