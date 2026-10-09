@@ -232,7 +232,7 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
-      <input type="file" accept=".json,.enc" id="newFile"><br><br>
+      <input type="file" id="newFile"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <p>Select Local DB: <select id="localSel"></select><button onclick="newLocal()">New Local DB</button></p>
       <br><br>
@@ -674,8 +674,11 @@
                 system: data.system,
                 version: data.version
               }
-            } else {
+            } else if(file.name.toLowerCase().endsWith(".json")) {
               json = JSON.parse(text);
+            } else {
+              alert("Wrong file type")
+            		return  
             }
 
             let a = await setupDB()
@@ -689,7 +692,8 @@
               window.location.reload()
             }
           } catch (err) {
-              console.error("Invalid JSON:", err);
+            alert("Invalid JSON")
+            console.error("Invalid JSON:", err);
           }
       });
 
