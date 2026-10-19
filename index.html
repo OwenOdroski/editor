@@ -714,12 +714,12 @@
 
               wrapper.appendChild(option)
             }
+          } catch(err) {
+            document.getElementById('db-stat').innerHTML = "DB Status: error"
+            loadEditor("text")
+            console.log(err)
           }
-        } catch(err) {
-          document.getElementById('db-stat').innerHTML = "DB Status: error"
-          loadEditor("text")
-          console.log(err)
-        }
+        } 
       }
 
       // Text Editor
