@@ -472,35 +472,93 @@
     <script defer>
 
     const consoleDiv = document.getElementById("console");
+    const MAX_LENGTH = 10000;
 
-    ["log", "warn", "error", "info", "debug"].forEach(type => {
-        const original = console[type];
+    function formatConsoleArg(arg) {
+        if (arg instanceof Error) {
+            return `${arg.name}: ${arg.message}\n${arg.stack || ""}`;
+        }
 
-        console[type] = function (...args) {
-            original.apply(console, args);
+        if (typeof arg === "undefined") return "undefined";
+        if (arg === null) return "null";
 
-            const line = document.createElement("div");
-            line.className = `console-${type}`;
+        if (typeof arg === "object") {
+            try {
+                const seen = new WeakSet();
 
-            line.textContent = args.map(arg => {
-                if (typeof arg === "object") {
-                    try {
-                      if(JSON.stringify(arg, null, 2).length < 200) {
-                        return JSON.stringify(arg, null, 2);
-                      } else {
-                        let str = JSON.stringify(arg, null, 2).slice(0, -200)
-                        return "String too long";
-                      }
-                    } catch {
-                        return String(arg);
+                return JSON.stringify(arg, (key, value) => {
+                    if (value instanceof Error) {
+                        return {
+                            name: value.name,
+                            message: value.message,
+                            stack: value.stack
+                        };
                     }
-                }
 
+                    if (typeof value === "bigint") {
+                        return value.toString() + "n";
+                    }
+
+                    if (typeof value === "object" && value !== null) {
+                        if (seen.has(value)) return "[Circular]";
+                        seen.add(value);
+                    }
+
+                    return value;
+                }, 2);
+            } catch (err) {
                 return String(arg);
-            }).join(" ");
+            }
+        }
 
-            consoleDiv.appendChild(line);
+        return String(arg);
+    }
+
+    function addConsoleLine(type, args) {
+        if (!consoleDiv) return;
+
+        const line = document.createElement("div");
+        line.className = `console-${type}`;
+
+        let text = args.map(formatConsoleArg).join(" ");
+
+        if (text.length > MAX_LENGTH) {
+            text = text.slice(0, MAX_LENGTH) + "\n... (truncated)";
+        }
+
+        line.textContent = text;
+        line.style.whiteSpace = "pre-wrap";
+        line.style.overflowWrap = "anywhere";
+
+        consoleDiv.appendChild(line);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+
+    // Override console methods
+    ["log", "warn", "error", "info", "debug"].forEach(type => {
+        const original = console[type].bind(console);
+
+        console[type] = (...args) => {
+            original(...args);
+            addConsoleLine(type, args);
         };
+    });
+
+    // Catch uncaught JavaScript errors
+    window.addEventListener("error", event => {
+        addConsoleLine("error", [
+            event.error || event.message,
+            `File: ${event.filename}`,
+            `Line: ${event.lineno}, Column: ${event.colno}`
+        ]);
+    });
+
+    // Catch unhandled Promise rejections
+    window.addEventListener("unhandledrejection", event => {
+        addConsoleLine("error", [
+            "Unhandled Promise Rejection:",
+            event.reason
+        ]);
     });
 
       // DB Handling
