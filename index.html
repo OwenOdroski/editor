@@ -232,7 +232,11 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
-      <input type="file" id="newFile"><br><br>
+      <input
+    type="file"
+    id="newFile"
+    accept=".json,.enc,application/json,application/octet-stream"
+><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <p>Select Local DB: <select id="localSel"></select><button onclick="newLocal()">New Local DB</button></p>
       <br><br>
