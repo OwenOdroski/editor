@@ -11,20 +11,33 @@
     <script src="./three-csg.js" type="module"></script>
   </head>
   <style>
+  	html, body {
+   		margin: 0;
+    		padding: 0;
+    		width: 100%;
+    		height: 100%;
+    		overflow: hidden;
+		}
     #canvas {
       position: fixed;
       top: 0;
-      left: 0
+      left: 0;
+      width: 100vw !important;
+    		height: 100dvh !important;
     }
     #ext-panel {
       position: fixed;
       top: 0px;
       left: 0px;
+      width: 100vw !important;
+    		height: 100dvh !important;
     }
     #int-panel {
       position: fixed;
       top: 0px;
       left: 0px;
+      width: 100vw !important;
+			height: 100dvh !important;
     }
     #top {
       position: fixed;
