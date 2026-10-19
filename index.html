@@ -717,20 +717,13 @@
           }
         } catch(err) {
           document.getElementById('db-stat').innerHTML = "DB Status: error"
-          loadEditor()
+          loadEditor("text")
           console.log(err)
         }
       }
 
       // Text Editor
       let container = document.getElementById("area");
-
-      let editor = new JSONEditor(container, {
-          mode: "tree",
-          modes: ["tree", "code"],
-          mainMenuBar: true,
-          navigationBar: true
-      });
 
       function saveJSONtext() {
         try {
@@ -742,7 +735,15 @@
         }
       }
 
-      async function loadEditor() {
+      async function loadEditor(mode) {
+        if(!mode) mode = "tree"
+        let editor = new JSONEditor(container, {
+            mode: mode,
+            modes: ["tree", "code"],
+            mainMenuBar: true,
+            navigationBar: true
+        });
+
         let textarea = document.getElementById('area')
         let json = await getJSON(indexed, 'editDB')
         let text = json
