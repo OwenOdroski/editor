@@ -802,6 +802,8 @@
           let json = await getJSON(indexed, 'editDB')
           let text = json
 
+          if(typeof json == "string") text = JSON.parse(text)
+
           editor.set(text);
         } catch(err) {
           alert("ERROR LOADING EDITOR: ", err)
