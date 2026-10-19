@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="./manifest2.json">
+    <link rel="manifest" href="/manifest2.json">
     <link href="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.js"></script>
     <script src="./three-csg.js" type="module"></script>
@@ -699,57 +699,50 @@
         indexed = a
 
         if(c != false) {
-          try {
-            document.getElementById('db-stat').innerHTML = "DB Status: loaded"
-            db = await getJSON(a, 'editDB')
-            updateTop()
-            loadEditor()
-            loadChecklists()
+          document.getElementById('db-stat').innerHTML = "DB Status: loaded"
+          db = await getJSON(a, 'editDB')
+          updateTop()
+          loadEditor()
+          loadChecklists()
 
-            for(let i in db.locals) {
-              let wrapper = document.getElementById('localSel')
-              let option = document.createElement('option')
+          for(let i in db.locals) {
+            let wrapper = document.getElementById('localSel')
+            let option = document.createElement('option')
 
-              option.textContent = db.locals[i].name
+            option.textContent = db.locals[i].name
 
-              wrapper.appendChild(option)
-            }
-          } catch(err) {
-            document.getElementById('db-stat').innerHTML = "DB Status: error"
-            loadEditor("text")
-            console.log(err)
+            wrapper.appendChild(option)
           }
-        } 
+        }
       }
 
       // Text Editor
       let container = document.getElementById("area");
 
+      let editor = new JSONEditor(container, {
+          mode: "tree",
+          modes: ["tree", "code"],
+          mainMenuBar: true,
+          navigationBar: true
+      });
+
       function saveJSONtext() {
         try {
           let textarea = editor.get()
+          let json = JSON.parse(textarea)
 
           saveJSON(indexed, "editDB", textarea)
         } catch(err) {
-          alert(err)
+          alert("ERROR SAVING: " + err)
         }
       }
 
-      async function loadEditor(mode) {
-        if(!mode) mode = "tree"
-        let editor = new JSONEditor(container, {
-            mode: mode,
-            modes: ["tree", "code"],
-            mainMenuBar: true,
-            navigationBar: true
-        });
-
+      async function loadEditor() {
         let textarea = document.getElementById('area')
         let json = await getJSON(indexed, 'editDB')
         let text = json
 
-        if(mode != "text") editor.set(text);
-        if(mode == "text") editor.setText(text)
+        editor.set(text);
       }
 
       // TO Search
