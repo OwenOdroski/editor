@@ -748,7 +748,8 @@
         let json = await getJSON(indexed, 'editDB')
         let text = json
 
-        editor.set(text);
+        if(mode != "text") editor.set(text);
+        if(mode == "text") editor.setText(text)
       }
 
       // TO Search
