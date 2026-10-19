@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="./manifest2.json">
+    <link rel="manifest" href="/manifest2.json">
     <link href="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsoneditor/dist/jsoneditor.min.js"></script>
     <script src="./three-csg.js" type="module"></script>
@@ -232,11 +232,7 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
-      <input
-    type="file"
-    id="newFile"
-    accept=".json,.enc,application/json,application/octet-stream"
-><br><br>
+      <input type="file" id="newFile" accept=".json,.enc,application/json,application/octet-stream"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <p>Select Local DB: <select id="localSel"></select><button onclick="newLocal()">New Local DB</button></p>
       <br><br>
@@ -686,10 +682,10 @@
             let c = await hasJSON(a, 'editDB')
 
             if(!c) {
-              await saveJSON(a, "editDB", json)
+              saveJSON(a, "editDB", json)
               window.location.reload()
             } else if(confirm("Replace existing DB?")) {
-              await saveJSON(a, "editDB", json)
+              saveJSON(a, "editDB", json)
               window.location.reload()
             }
           } catch (err) {
@@ -705,9 +701,11 @@
         if(c != false) {
           document.getElementById('db-stat').innerHTML = "DB Status: loaded"
           db = await getJSON(a, 'editDB')
-          updateTop()
           loadEditor()
+          updateTop()
           loadChecklists()
+
+          window.dispatchEvent(new Event("update"))
 
           for(let i in db.locals) {
             let wrapper = document.getElementById('localSel')
@@ -734,23 +732,28 @@
         try {
           let textarea = editor.get()
 
-          saveJSON(indexed, "editDB", JSON.stringify(textarea))
+          saveJSON(indexed, "editDB", textarea)
         } catch(err) {
           alert("ERROR SAVING: " + err)
         }
       }
 
       async function loadEditor() {
-        let textarea = document.getElementById('area')
-        let json = await getJSON(indexed, 'editDB')
-        let text = json
+        try {
+          let textarea = document.getElementById('area')
+          let json = await getJSON(indexed, 'editDB')
+          let text = json
 
-        editor.set(text);
+          editor.set(text);
+        } catch(err) {
+          alert("ERROR LOADING EDITOR: ", err)
+        }
       }
 
       // TO Search
       let toRes = document.getElementById('to-res')
-      window.setTimeout(function() {
+
+      window.addEventListener("update", function() {
         for(let i = 0; i < db.system.to.length; i++) {
           let span = document.createElement('span')
           span.textContent = db.system.to[i].name + " (" + db.system.to[i].TO + ", " + db.system.to[i].MIDAS + ")"
@@ -758,7 +761,7 @@
           toRes.appendChild(document.createElement('br'))
           toRes.appendChild(document.createElement('br'))
         }
-      }, 3000)
+      })
 
       function addTO() {
         let nomen = document.getElementById('to-nomen')
@@ -843,13 +846,13 @@
       let res = document.getElementById('ref-res')
       sel2.innerHTML = ''
 
-      window.setTimeout(function() {
+      window.addEventListener("update", function() {
         for(let i in db.locals[localSel].db.notes) {
           let option = document.createElement('option')
           option.textContent = db.locals[localSel].db.notes[i].name
           sel2.appendChild(option)
         }
-      }, 3000)
+      })
 
       sel2.onchange = function() {
         let data = db.locals[localSel].db.notes[sel2.selectedIndex].steps
@@ -980,7 +983,7 @@
       let light2 = new THREE.AmbientLight(0xffffff, 1);
       scene2.add(light2);
 
-      window.setTimeout(function() {
+      window.addEventListener("update", function() {
         load.load('cockpit.glb', (gltf) => {
           scene2.add(gltf.scene)
           gltf.scene.position.set(0, -20, 200)
@@ -1090,14 +1093,14 @@
             }
           }
         }
-      }, 500)
+      })
 
       function loop2() {
         requestAnimationFrame(loop2)
 
         renderer2.render(scene2, camera2)
       }
-      loop2()
+      window.addEventListener("update", loop2)
 
       // External Panel Chart
       let scene3 = new THREE.Scene();
@@ -1115,143 +1118,145 @@
       let light3 = new THREE.AmbientLight(0xffffff, 1);
       scene3.add(light3);
 
-      load.load('f16.glb', (gltf) => {
+      window.addEventListener("update", function() {
+        load.load('f16.glb', (gltf) => {
 
-        gltf.scene.children[0].children[0].children[0].children[5].visible = false
-        gltf.scene.children[0].children[0].children[0].children[3].visible = false
+          gltf.scene.children[0].children[0].children[0].children[5].visible = false
+          gltf.scene.children[0].children[0].children[0].children[3].visible = false
 
-        scene3.add(gltf.scene)
+          scene3.add(gltf.scene)
 
-        // Add saved panels
-        for(let i in db.system.panels) {
-          let curr = db.system.panels[i]
-          let mesh = new THREE.Mesh(
-            new THREE.SphereGeometry(1, 12, 12),
-            new THREE.MeshBasicMaterial({color: 0xFF0000, opacity: 0.4, transparent: true})
-          )
-          mesh.position.set(curr.cords[0], curr.cords[1], curr.cords[2])
-          mesh.name = i
-          scene3.add(mesh)
-        }
+          // Add saved panels
+          for(let i in db.system.panels) {
+            let curr = db.system.panels[i]
+            let mesh = new THREE.Mesh(
+              new THREE.SphereGeometry(1, 12, 12),
+              new THREE.MeshBasicMaterial({color: 0xFF0000, opacity: 0.4, transparent: true})
+            )
+            mesh.position.set(curr.cords[0], curr.cords[1], curr.cords[2])
+            mesh.name = i
+            scene3.add(mesh)
+          }
 
-        let raycaster = new THREE.Raycaster()
-        let pointer = new THREE.Vector2()
+          let raycaster = new THREE.Raycaster()
+          let pointer = new THREE.Vector2()
 
-        c3.onclick = function(event) {
-          const rect = c3.getBoundingClientRect();
+          c3.onclick = function(event) {
+            const rect = c3.getBoundingClientRect();
 
-          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-          raycaster.setFromCamera(pointer, camera3);
+            raycaster.setFromCamera(pointer, camera3);
 
-          const intersects = raycaster.intersectObjects(scene3.children, true);
+            const intersects = raycaster.intersectObjects(scene3.children, true);
 
-          if(intersects.length != 0) {
-            let obj = intersects[0].object
+            if(intersects.length != 0) {
+              let obj = intersects[0].object
 
-            if(obj.name[0] == 'O') { // Create new
-              open(intersects[0].point)
-            } else {
-              open(undefined, obj.name)
-            }
-            function open(pos, index) {
-              let wind = newDragBox()
-              let win = wind.win
-              let number = document.createElement('input')
-              let ref = document.createElement('input')
-              let fastener = document.createElement('input')
-              let type = document.createElement('select')
-              let desc = document.createElement('textarea')
-              let save = document.createElement('button')
-              let del = document.createElement('button')
-              let label = (name) => {
-                let l = document.createElement('span')
-                l.textContent = name
-                l.prepend(document.createElement('br'))
-                return l
+              if(obj.name[0] == 'O') { // Create new
+                open(intersects[0].point)
+              } else {
+                open(undefined, obj.name)
               }
-              win.style.margin = 3
-
-              type.innerHTML = `
-                <option>Panel</option>
-                <option>Door</option>
-                <option>Quick Access Door</option>
-                <option>Stress Panel</option>
-              `
-
-              if(index != undefined) {
-                number.value = db.system.panels[index].number ? db.system.panels[index].number : ""
-                ref.value = db.system.panels[index].ref != "undefined" ? db.system.panels[index].ref : ""
-                desc.value = db.system.panels[index].desc != "undefined" ? db.system.panels[index].desc : ""
-                fastener.value = db.system.panels[index].fast != "undefined" ? db.system.panels[index].fast : ""
-
-                type.selectedIndex = ["PANEL", "DOOR", "QUICK ACCESS DOOR", "STRESS PANEL"].indexOf(db.system.panels[index].type.toUpperCase())
-              }
-              let mesh
-              // Create mesh
-              if(pos != undefined) {
-                mesh = new THREE.Mesh(
-                  new THREE.SphereGeometry(1, 12, 12),
-                  new THREE.MeshBasicMaterial({color: 0xFF0000, opacity: 0.4, transparent: true})
-                )
-                mesh.position.copy(pos)
-                scene3.add(mesh)
-              }
-
-              save.textContent = 'Save'
-              del.textContent = 'Delete'
-
-              save.onclick = function() {
-                if(index != undefined) {
-                  db.system.panels[index].number = number.value
-                  db.system.panels[index].ref = ref.value
-                  db.system.panels[index].desc = desc.value
-                  db.system.panels[index].type = type.value
-                  db.system.panels[index].fast = fastener.value
-                } else {
-                  db.system.panels.push({
-                    number: number.value,
-                    ref: ref.value,
-                    desc: desc.value,
-                    type: type.value,
-                    cords: [mesh.position.x, mesh.position.y, mesh.position.z]
-                  })
+              function open(pos, index) {
+                let wind = newDragBox()
+                let win = wind.win
+                let number = document.createElement('input')
+                let ref = document.createElement('input')
+                let fastener = document.createElement('input')
+                let type = document.createElement('select')
+                let desc = document.createElement('textarea')
+                let save = document.createElement('button')
+                let del = document.createElement('button')
+                let label = (name) => {
+                  let l = document.createElement('span')
+                  l.textContent = name
+                  l.prepend(document.createElement('br'))
+                  return l
                 }
-                wind.remove()
-                saveTop()
-              }
-              del.onclick = function() {
+                win.style.margin = 3
+
+                type.innerHTML = `
+                  <option>Panel</option>
+                  <option>Door</option>
+                  <option>Quick Access Door</option>
+                  <option>Stress Panel</option>
+                `
+
                 if(index != undefined) {
-                  db.system.panels.splice(index, 1)
+                  number.value = db.system.panels[index].number ? db.system.panels[index].number : ""
+                  ref.value = db.system.panels[index].ref != "undefined" ? db.system.panels[index].ref : ""
+                  desc.value = db.system.panels[index].desc != "undefined" ? db.system.panels[index].desc : ""
+                  fastener.value = db.system.panels[index].fast != "undefined" ? db.system.panels[index].fast : ""
+
+                  type.selectedIndex = ["PANEL", "DOOR", "QUICK ACCESS DOOR", "STRESS PANEL"].indexOf(db.system.panels[index].type.toUpperCase())
                 }
-                scene3.remove(mesh)
-                wind.remove()
-                saveTop()
+                let mesh
+                // Create mesh
+                if(pos != undefined) {
+                  mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(1, 12, 12),
+                    new THREE.MeshBasicMaterial({color: 0xFF0000, opacity: 0.4, transparent: true})
+                  )
+                  mesh.position.copy(pos)
+                  scene3.add(mesh)
+                }
+
+                save.textContent = 'Save'
+                del.textContent = 'Delete'
+
+                save.onclick = function() {
+                  if(index != undefined) {
+                    db.system.panels[index].number = number.value
+                    db.system.panels[index].ref = ref.value
+                    db.system.panels[index].desc = desc.value
+                    db.system.panels[index].type = type.value
+                    db.system.panels[index].fast = fastener.value
+                  } else {
+                    db.system.panels.push({
+                      number: number.value,
+                      ref: ref.value,
+                      desc: desc.value,
+                      type: type.value,
+                      cords: [mesh.position.x, mesh.position.y, mesh.position.z]
+                    })
+                  }
+                  wind.remove()
+                  saveTop()
+                }
+                del.onclick = function() {
+                  if(index != undefined) {
+                    db.system.panels.splice(index, 1)
+                  }
+                  scene3.remove(mesh)
+                  wind.remove()
+                  saveTop()
+                }
+
+                win.appendChild(label('Number'))
+                win.appendChild(number)
+
+                win.appendChild(label('TO Reference'))
+                win.appendChild(ref)
+
+                win.appendChild(label('Fastener P/N'))
+                win.appendChild(fastener)
+
+                win.appendChild(label('Type'))
+                type.style.width = "calc(100% - 8px)"
+                win.appendChild(type)
+
+                win.appendChild(label('Description'))
+                win.appendChild(desc)
+
+                win.appendChild(save)
+                win.appendChild(del)
               }
-
-              win.appendChild(label('Number'))
-              win.appendChild(number)
-
-              win.appendChild(label('TO Reference'))
-              win.appendChild(ref)
-
-              win.appendChild(label('Fastener P/N'))
-              win.appendChild(fastener)
-
-              win.appendChild(label('Type'))
-              type.style.width = "calc(100% - 8px)"
-              win.appendChild(type)
-
-              win.appendChild(label('Description'))
-              win.appendChild(desc)
-
-              win.appendChild(save)
-              win.appendChild(del)
             }
           }
-        }
-      })
+        })
+    })
 
       function loop3() {
         requestAnimationFrame(loop3)
@@ -1259,7 +1264,7 @@
         renderer3.render(scene3, camera3)
       }
 
-      loop3()
+      window.addEventListener("update", loop3)
 
 
       // Spatial Index Editing
@@ -1343,12 +1348,9 @@
       move.value = unit
       rota.value = rot
 
-      async function getWUC() {
-        window.setTimeout(function() {
-          WUC = db.system.WUC
-        }, 1500)
-      }
-      getWUC()
+      window.addEventListener("update", async function getWUC() {
+        WUC = db.system.WUC
+      })
 
       const WUCFill = document.getElementById('WUC');
       const NOC = document.getElementById('noc-wuc');
@@ -1367,7 +1369,7 @@
         update();
       }
 
-      resizeDrawCanvas();
+      window.addEventListener("update", resizeDrawCanvas)
 
       window.addEventListener("resize", resizeDrawCanvas);
 
@@ -3098,7 +3100,7 @@
 
         renderer.render(scene, camera)
       }
-      loop()
+      window.addEventListener("update", loop)
 
       function canvasPoint(p) {
         const rect = canvas.getBoundingClientRect();
