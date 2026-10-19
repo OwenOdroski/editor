@@ -232,7 +232,7 @@
       <div class="spacer"></div>
       <!-- Home screen -->
       <h3 id="db-stat">DB Status: not loaded</h3>
-      <input type="file" id="newFile"><br><br>
+      <input type="file" accept=".json, .enc" id="newFile"><br><br>
       <button onclick="downloadJSON()">Export DB</button>
       <p>Select Local DB: <select id="localSel"></select><button onclick="newLocal()">New Local DB</button></p>
       <br><br>
@@ -674,11 +674,8 @@
                 system: data.system,
                 version: data.version
               }
-            } else if(file.name.toLowerCase().endsWith(".json")) {
-              json = JSON.parse(text);
             } else {
-              alert("Wrong file type")
-            		return  
+              json = JSON.parse(text);
             }
 
             let a = await setupDB()
@@ -692,8 +689,7 @@
               window.location.reload()
             }
           } catch (err) {
-            alert("Invalid JSON")
-            console.error("Invalid JSON:", err);
+              console.error("Invalid JSON:", err);
           }
       });
 
@@ -703,20 +699,26 @@
         indexed = a
 
         if(c != false) {
-          document.getElementById('db-stat').innerHTML = "DB Status: loaded"
-          db = await getJSON(a, 'editDB')
-          updateTop()
-          loadEditor()
-          loadChecklists()
+          try {
+            document.getElementById('db-stat').innerHTML = "DB Status: loaded"
+            db = await getJSON(a, 'editDB')
+            updateTop()
+            loadEditor()
+            loadChecklists()
 
-          for(let i in db.locals) {
-            let wrapper = document.getElementById('localSel')
-            let option = document.createElement('option')
+            for(let i in db.locals) {
+              let wrapper = document.getElementById('localSel')
+              let option = document.createElement('option')
 
-            option.textContent = db.locals[i].name
+              option.textContent = db.locals[i].name
 
-            wrapper.appendChild(option)
+              wrapper.appendChild(option)
+            }
           }
+        } catch(err) {
+          document.getElementById('db-stat').innerHTML = "DB Status: error"
+          loadEditor()
+          console.log(err)
         }
       }
 
